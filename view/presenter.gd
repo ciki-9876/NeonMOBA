@@ -232,8 +232,15 @@ func _draw_minimap() -> void:
 		m.draw_arc(c + gm.rounds.core_pos() * k, gm.rounds.CORE_R * k, 0, TAU, 24, Color(1.8, 1.8, 1.8, 0.9) if gm.rounds.core_open() else Color(0.6, 0.6, 0.8, 0.6), 2.0)
 	for r in gm.runes:
 		m.draw_circle(c + r.position * k, 3.0, Color(1.6, 1.6, 0.6))
+	if gm.terrain != null:
+		for b in gm.terrain.brush:
+			m.draw_circle(c + b[0] * k, float(b[1]) * k, Color(0.2, 0.9, 0.4, 0.35))
+		for pl in gm.terrain.circles:
+			m.draw_circle(c + pl[0] * k, maxf(2.0, float(pl[1]) * k), Color(0.7, 0.75, 1.0, 0.9))
+		for rc in gm.terrain.rects:
+			m.draw_rect(Rect2(c + rc.position * k, rc.size * k), Color(0.7, 0.75, 1.0, 0.9))
 	for h in gm.heroes:
-		if h.dead: continue
+		if h.dead or not _seen(h): continue
 		var col: Color = h.team_color()
 		m.draw_circle(c + h.position * k, 5.0 if h.is_player else 3.5, col)
 		if h.is_player:
@@ -268,11 +275,12 @@ func _draw_overlay() -> void:
 		elif e.kind == "mender":
 			o.draw_arc(e.position, 260.0, 0, TAU, 48, Color(0.4, 1.0, 0.6, 0.25), 1.5)
 	for h in gm.heroes:
-		h.kit.draw(o)
+		if _seen(h):
+			h.kit.draw(o)
 	var view := Rect2(cam.get_screen_center_position() - Vector2(700, 420), Vector2(1400, 840))
 	# heroes: team rings, windup / backswing / cast feedback, bars
 	for h in gm.heroes:
-		if h.dead or not view.has_point(h.position): continue
+		if h.dead or not view.has_point(h.position) or not _seen(h): continue
 		_draw_hero(o, h, tick)
 	if inp.selected != null and is_instance_valid(inp.selected) and inp.selected != gm.player and not inp.selected.dead:
 		o.draw_arc(inp.selected.position, inp.selected.radius + 10.0, 0, TAU, 32, Color(1.0, 0.85, 0.3, 0.9), 2.5)
@@ -563,7 +571,22 @@ func menu_frame(delta: float) -> void:
 	grid.queue_redraw()
 
 ## camera, shake and redraws after the simulation stepped
+## which team the screen shows the world for (the player's; team 0 when spectating)
+func _viewer() -> int:
+	return gm.player.team if gm.player != null else 0
+
+## brush: enemies the viewer's team can't see are not drawn at all
+func _seen(h) -> bool:
+	return gm.visible_to(h, _viewer())
+
 func frame(delta: float) -> void:
+	if gm.terrain != null:
+		var vt := _viewer()
+		for h in gm.heroes:
+			var vis: bool = gm.visible_to(h, vt)
+			h.visible = vis
+			# own heroes hiding in brush are drawn translucent
+			h.modulate.a = 0.55 if (h.team == vt and not h.dead and gm.terrain.brush_at(h.position) >= 0) else 1.0
 	if gm.player != null and not gm.player.dead:
 		cam.position = gm.player.position + Vector2(0, 70)
 	cam.offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * gm.shake
@@ -580,6 +603,12 @@ func _draw_rounds_floor() -> void:
 	o.draw_circle(Vector2.ZERO, C.ARENA_R, Color(0.05, 0.03, 0.12, 0.55))
 	o.draw_arc(Vector2.ZERO, C.ARENA_R, 0, TAU, 160, Color(0.6, 1.2, 2.4, 0.9), 6.0)
 	o.draw_arc(Vector2.ZERO, C.ARENA_R + 14.0, 0, TAU, 160, Color(1.6, 0.4, 2.0, 0.5), 2.0)
+	if gm.terrain != null:
+		# shadows of the obstacles on the floor (the solid blocks are drawn in the overlay)
+		for pl in gm.terrain.circles:
+			o.draw_circle(pl[0] + Vector2(10, 14), float(pl[1]), Color(0, 0, 0, 0.45))
+		for rc in gm.terrain.rects:
+			o.draw_rect(Rect2(rc.position + Vector2(10, 14), rc.size), Color(0, 0, 0, 0.45))
 	for tm in 2:
 		var hp := gm.home_pos(tm)
 		var c := Color(0.3, 1.6, 1.2) if tm == 0 else Color(2.0, 0.4, 0.4)
@@ -587,8 +616,35 @@ func _draw_rounds_floor() -> void:
 		o.draw_arc(hp, 40.0, 0, TAU, 32, c, 4.0)
 
 ## the core: locked (grey) / open (pulsing) with each team's capture arc; spawn walls during the buy phase
+func _draw_terrain(o: Node2D, tick: float) -> void:
+	var t = gm.terrain
+	# brush: soft green patches with swaying blade strokes (drawn over units, so hiding reads clearly)
+	for i in t.brush.size():
+		var bc: Vector2 = t.brush[i][0]
+		var br: float = t.brush[i][1]
+		o.draw_circle(bc, br, Color(0.12, 0.55, 0.25, 0.30))
+		o.draw_arc(bc, br, 0, TAU, 48, Color(0.3, 1.6, 0.6, 0.55), 2.0)
+		var n := int(br / 9.0)
+		for k in n:
+			var a := TAU * k / float(n) + float(i) * 0.7
+			var rr: float = br * (0.25 + 0.7 * fmod(k * 0.618, 1.0))
+			var base := bc + Vector2.from_angle(a) * rr
+			var sway := sin(tick * 1.8 + k * 1.3) * 3.0
+			o.draw_line(base, base + Vector2(sway, -14.0), Color(0.35, 1.5, 0.6, 0.45), 2.0)
+	# pillars and walls: solid blocks with a neon rim
+	for pl in t.circles:
+		o.draw_circle(pl[0], float(pl[1]), Color(0.10, 0.09, 0.20, 1.0))
+		o.draw_circle(pl[0], float(pl[1]) * 0.6, Color(0.16, 0.14, 0.30, 1.0))
+		o.draw_arc(pl[0], float(pl[1]), 0, TAU, 48, Color(0.8, 1.0, 2.4, 0.95), 3.0)
+	for rc in t.rects:
+		o.draw_rect(rc, Color(0.10, 0.09, 0.20, 1.0))
+		o.draw_rect((rc as Rect2).grow(-10.0), Color(0.16, 0.14, 0.30, 1.0))
+		o.draw_rect(rc, Color(0.8, 1.0, 2.4, 0.95), false, 3.0)
+
 func _draw_rounds_overlay(o: Node2D, tick: float) -> void:
 	var r = gm.rounds
+	if gm.terrain != null:
+		_draw_terrain(o, tick)
 	var p: Vector2 = r.core_pos()
 	var rad: float = r.CORE_R
 	if r.core_open():

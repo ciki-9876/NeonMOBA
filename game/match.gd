@@ -17,6 +17,8 @@ const Ring = preload("res://view/ring.gd")
 const Rounds = preload("res://game/rounds.gd")
 const Profiles = preload("res://game/profiles.gd")
 const RunesDB = preload("res://game/runes_db.gd")
+const Terrain = preload("res://game/terrain.gd")
+const Maps = preload("res://game/maps.gd")
 
 signal world_cleared
 signal match_started
@@ -36,6 +38,11 @@ var seed_used := 0
 var next_uid := 0
 ## round-mode rules (game/rounds.gd); null in the other modes
 var rounds = null
+## terrain of the current map (game/terrain.gd); null = open ground (survival / old arena)
+var terrain = null
+var map_id := ""
+## per team: hero uid -> visible to that team (brush), recomputed every step
+var _vis := [{}, {}]
 
 # ============================================================ state
 var state := C.S.MENU
@@ -133,6 +140,7 @@ func _clear_world() -> void:
 	team0.clear()
 	player = null
 	rounds = null
+	terrain = null
 	brains = {}
 	autopilot = false
 	world_cleared.emit()
@@ -241,6 +249,12 @@ func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {})
 	mode = C.M.ROUNDS
 	difficulty = diff
 	last_cfg = {"mode": C.M.ROUNDS, "a": a, "b": b, "diff": diff, "setup": setup}
+	map_id = str(setup.get("map", Maps.DEFAULT))
+	if not Maps.MAPS.has(map_id):
+		map_id = Maps.DEFAULT
+	terrain = Terrain.new()
+	terrain.setup(Maps.MAPS[map_id], C.ARENA_R)
+	_vis = [{}, {}]
 	var human: bool = bool(setup.get("human", true))
 	var profs: Array = setup.get("profiles", [[], []])
 	var runes: Array = setup.get("runes", [{}, {}])
@@ -318,9 +332,59 @@ func _end(win: bool) -> void:
 
 # ============================================================ hero API (used by hero.gd, kits and the AI)
 func clamp_pos(p: Vector2, r := 16.0) -> Vector2:
-	if mode == C.M.ARENA and p.length() > C.ARENA_R - r:
-		return p.normalized() * (C.ARENA_R - r)
+	if mode != C.M.SURVIVAL and p.length() > C.ARENA_R - r:
+		p = p.normalized() * (C.ARENA_R - r)
+	if terrain != null:
+		p = terrain.push_out(p, r)
 	return p
+
+## line of sight between two points (terrain blocks it)
+func has_los(a: Vector2, b: Vector2) -> bool:
+	return terrain == null or terrain.has_los(a, b)
+
+## does terrain occupy this point? (skillshots stop here)
+func blocked_at(p: Vector2) -> bool:
+	return terrain != null and terrain.blocked(p, 0.0)
+
+# ------------------------------------------------------------ brush visibility (草丛)
+## a hero standing in brush is hidden from the other team, unless one of them is in the same brush
+## or very close, or it attacked / cast in the last 1.2 s
+func visible_to(u, tm: int) -> bool:
+	if terrain == null or u.team == tm or not bool(u.is_hero):
+		return true
+	return bool(_vis[tm].get(u.uid, true))
+
+func _update_vis() -> void:
+	if terrain == null or terrain.brush.is_empty():
+		return
+	for tm in 2:
+		var d := {}
+		for u in heroes:
+			if u.team != tm:
+				d[u.uid] = _compute_vis(u, tm)
+		_vis[tm] = d
+
+func _compute_vis(u, tm: int) -> bool:
+	if u.dead:
+		return true
+	var b: int = terrain.brush_at(u.position)
+	if b < 0 or t - float(u.revealed_t) < 1.2:
+		return true
+	for v in heroes:
+		if v.team == tm and not v.dead and (terrain.brush_at(v.position) == b or v.position.distance_to(u.position) < 150.0):
+			return true
+	return false
+
+func reveal(u) -> void:
+	u.revealed_t = t
+
+## the foes a team can actually see (AI perception, auto-acquire)
+func seen_foes(tm: int, p: Vector2, r: float) -> Array:
+	var out := []
+	for u in foes_in(tm, p, r):
+		if visible_to(u, tm):
+			out.append(u)
+	return out
 
 func home_pos(tm: int) -> Vector2:
 	return Vector2(-1000.0 if tm == 0 else 1000.0, 0.0)
@@ -359,7 +423,7 @@ func foes_all(tm: int) -> Array:
 func nearest_foe(tm: int, p: Vector2, max_d: float):
 	var best_u = null
 	var bd := max_d
-	for u in foes_in(tm, p, max_d):
+	for u in seen_foes(tm, p, max_d):
 		var dd: float = p.distance_to(u.position) - u.radius
 		if dd < bd:
 			bd = dd
@@ -370,7 +434,7 @@ func nearest_foe_hero(tm: int, p: Vector2):
 	var best_u = null
 	var bd := 1e9
 	for h in heroes:
-		if h.team == tm or not h.targetable():
+		if h.team == tm or not h.targetable() or not visible_to(h, tm):
 			continue
 		var dd: float = p.distance_to(h.position)
 		if dd < bd:
@@ -1529,6 +1593,7 @@ func step(d: float) -> void:
 	else:
 		return
 	team0 = _team_heroes(0)
+	_update_vis()
 	_rebuild_hash()
 	_apply_auras()
 	if state == C.S.PLAY:

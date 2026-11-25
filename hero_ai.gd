@@ -140,13 +140,16 @@ func update(d: float) -> void:
 		_eng_t += react
 	else:
 		_eng_t = 0.0
-	var foes: Array = g.foes_in(h.team, h.position, 1500.0)
+	var foes: Array = g.seen_foes(h.team, h.position, 1500.0)
 	var foe_heroes := []
 	for u in foes:
 		if bool(u.is_hero):
 			foe_heroes.append(u)
 	var hpf: float = h.hp / h.max_hp
+	var was_retreating := retreating
 	_update_retreat(hpf, foe_heroes, brain)
+	if retreating and not was_retreating:
+		_cover_end = -1.0
 	if retreating:
 		if _try_support(foe_heroes, brain):
 			return
@@ -219,6 +222,9 @@ func _objective_leash(brain) -> bool:
 			h.order_amove(brain.slot(h))
 			return true
 	return false
+
+func _aware01() -> float:
+	return clampf(1.0 - aware_noise / 70.0, 0.0, 1.0)
 
 ## reaction: step out of telegraphed areas and the path of skillshots
 func _try_dodge() -> bool:
@@ -389,6 +395,20 @@ func _do_retreat(foe_heroes: Array) -> void:
 				if h.order_cast(s, chaser if typ == "unit" else null, chaser.position) == "":
 					cast_lock = 0.5
 					return
+	# terrain: break line of sight behind a pillar / wall instead of running in the open
+	if g.terrain != null and chaser != null and cd < 480.0 and (_cover_end < 0.0 or g.t < _cover_end) and _roll("cover", 2.0) < _aware01():
+		var threats := []
+		for u in foe_heroes:
+			if h.position.distance_to(u.position) < 900.0:
+				threats.append(u.position)
+		var cp: Vector2 = g.terrain.best_cover(h.position, threats, 380.0, home)
+		if cp != Vector2.INF:
+			if _cover_end < 0.0:
+				_cover_end = g.t + 1.8
+			if h.position.distance_to(cp) > 20.0:
+				h.stat_add("cover_t", react)
+			h.order_move(cp)
+			return
 	h.order_move(home)
 
 # ------------------------------------------------------------ team support (heal / save / buff allies)
@@ -506,6 +526,8 @@ func _pick_target(foes: Array, brain):
 		else:
 			s += 25.0 - float(u.hp) * 0.005
 		s -= dist * 0.08
+		if g.terrain != null and not g.has_los(h.position, u.position):
+			s -= 70.0
 		if u == target:
 			s += 30.0
 		if g.in_enemy_fountain(u.position, h.team):
@@ -526,6 +548,7 @@ func _try_skills(t, foes: Array, brain) -> bool:
 	var dist: float = h.position.distance_to(t.position)
 	var t_hero: bool = bool(t.is_hero)
 	var t_disabled: float = t.disable_left() if t_hero else 0.0
+	var los: bool = g.has_los(h.position, t.position)
 	var committed: bool = brain == null or (brain.engage_ok and _eng_t >= engage_delay) or h.role() == "tank" or dist < h.atk_range() + 60.0
 	if not committed and _roll("commit", 3.0) < decide_err * 0.25:
 		committed = true   # poor decision making: commits before the frontline is in
@@ -533,6 +556,8 @@ func _try_skills(t, foes: Array, brain) -> bool:
 		var st: Dictionary = h.sdef[s]
 		var typ: String = st["type"]
 		if typ == "passive" or typ == "ally":
+			continue
+		if not los and typ != "self":
 			continue
 		var m := meta(s)
 		if m.is_empty():
@@ -660,6 +685,11 @@ func _roam(brain) -> void:
 		if e2 != null:
 			h.order_amove(e2.position)
 			return
+	if brain != null and brain.check_pos != Vector2.INF and brain.intent != "retreat" \
+			and (h.role() == "tank" or (h.role() != "support" and _roll("check", 3.0) < 0.3)) and _roll("check_aw", 3.0) < _aware01() + 0.2:
+		h.stat_add("brush_check", react)
+		h.order_amove(brain.check_pos)
+		return
 	if brain != null:
 		var slot: Vector2 = brain.slot(h)
 		if brain.intent == "fight" or brain.intent == "group":
@@ -694,6 +724,7 @@ const ARMOR_ITEMS := ["protect", "chainmail", "platemail", "phase", "ac", "shiva
 const MR_ITEMS := ["cloak"]
 ## 1 = adapts its build to the opponent after a lost round (tuning: --ai_b adapt=0 turns it off)
 var adapt := 1.0
+var _cover_end := -1.0      # cover is a short break of line of sight per retreat, not a place to camp
 
 func _shop() -> void:
 	if g.rounds != null:

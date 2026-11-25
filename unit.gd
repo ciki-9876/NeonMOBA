@@ -19,6 +19,8 @@ var team := 1
 ## deterministic id inside the current match (assigned by game/match.gd). Use it instead of
 ## get_instance_id() for any gameplay decision, otherwise results stop depending only on the seed.
 var uid := 0
+## last time this unit attacked / cast: in brush it stays visible for a moment afterwards
+var revealed_t := -99.0
 var is_hero := false
 var kind := ""
 var boss := false

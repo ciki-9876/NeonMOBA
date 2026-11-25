@@ -20,6 +20,15 @@ var my_power := 0.0
 var their_power := 0.0
 var _judge := 1.0
 var _judge_t := 0.0
+## terrain: staging lane chosen each round, enemy memory (brush), brush to check
+var lane := 0
+var _lane_round := -1
+var lane_brush := -1
+var last_seen := {}        # enemy uid -> [position, time]
+var ghosts := []           # alive enemies we can't see but remember: [[unit, last_pos], ...]
+var check_pos := Vector2.INF
+var aware01 := 0.5
+var _check_brush := false    # this round: does the team scout brush when enemies are unaccounted for?
 
 func setup(game, tm: int) -> void:
 	g = game
@@ -60,11 +69,12 @@ func update(d: float) -> void:
 	var allies := _alive(team)
 	var foes := []
 	for h in _alive(1 - team):
-		if h.targetable():
+		if h.targetable() and g.visible_to(h, team):
 			foes.append(h)
 	if allies.is_empty():
 		intent = "hold"
 		return
+	_update_memory(allies, foes)
 	var home: Vector2 = g.home_pos(team)
 	var c := _centroid(allies, home)
 	var ec := _centroid(foes, g.home_pos(1 - team))
@@ -76,8 +86,15 @@ func update(d: float) -> void:
 	for f in foes:
 		if f.position.distance_to(c) < 1300.0:
 			near_foes.append(f)
+	# remembered (hidden) enemies still count: an aware team doesn't forget who went into the brush
+	var near_ghosts := []
+	var all_ghosts := []
+	for gh in ghosts:
+		all_ghosts.append(gh[0])
+		if (gh[1] as Vector2).distance_to(c) < 1300.0:
+			near_ghosts.append(gh[0])
 	my_power = _power(allies)
-	their_power = _power(near_foes)
+	their_power = _power(near_foes + near_ghosts)
 	# decision: the team's read of a fight is noisy (average of its players' decision error)
 	var err := 0.0
 	for a in allies:
@@ -88,7 +105,7 @@ func update(d: float) -> void:
 		_judge_t = g.t + 3.0
 		_judge = exp(g.rng.randfn(0.0, err * 1.2))
 	my_power *= _judge
-	var total_foes := _power(foes)
+	var total_foes := _power(foes + all_ghosts)
 	# ---- intent
 	var dist := c.distance_to(ec)
 	var obj: Dictionary = g.objective(team)
@@ -125,9 +142,9 @@ func update(d: float) -> void:
 			if tank != null:
 				front = front.lerp(lead, 0.5)
 			if not obj.is_empty():
-				front = obj["stage"] if not bool(obj["open"]) else obj["pos"]
+				front = _stage(obj) if not bool(obj["open"]) else obj["pos"]
 		"setup":
-			front = obj["stage"]
+			front = _stage(obj)
 		"fight":
 			front = lead
 			if not obj.is_empty() and bool(obj["open"]):
@@ -138,6 +155,8 @@ func update(d: float) -> void:
 			front = home
 			if not obj.is_empty():
 				front = home.lerp(obj["stage"], 0.5)   # round mode: fall back, but stay in the fight
+				if g.terrain != null:
+					front = g.terrain.push_out(front, 30.0)
 	# ---- focus target: low effective hp, disabled, squishy, close to our front
 	var best = null
 	var bs := -1e9
@@ -185,6 +204,14 @@ func slot(h) -> Vector2:
 	var side := back.orthogonal()
 	var idx: int = int(h.uid % 3) - 1
 	var obj: Dictionary = g.objective(team)
+	if intent == "setup" and lane_brush >= 0:
+		# ambush lane: everybody hides inside the brush
+		var bc: Vector2 = g.terrain.brush[lane_brush][0]
+		var br: float = float(g.terrain.brush[lane_brush][1]) * 0.5
+		match h.role():
+			"tank": return bc + enemy_dir * br * 0.6
+			"carry": return bc - enemy_dir * br * 0.3 + side * br * 0.8
+		return bc - enemy_dir * br * 0.5 - side * br * 0.8
 	if not obj.is_empty() and bool(obj["open"]) and intent != "retreat":
 		# round mode, core open: everybody stands inside the core (capture needs presence)
 		var core: Vector2 = obj["pos"]
@@ -202,6 +229,91 @@ func slot(h) -> Vector2:
 			var rng: float = minf(h.atk_range() * 0.8, 380.0)
 			return front + back * maxf(120.0, rng) + side * 90.0 * float(idx)
 	return front + back * 360.0 + side * 70.0 * float(idx)
+
+# ------------------------------------------------------------ terrain: lanes, memory, brush checks
+func _team_aware() -> float:
+	var s := 0.0
+	var n := 0
+	for a in _alive(team):
+		if a.ai != null:
+			s += clampf(1.0 - float(a.ai.aware_noise) / 70.0, 0.0, 1.0)
+			n += 1
+	return s / float(n) if n > 0 else 0.5
+
+## staging point for this round (lane choice); falls back to the map's default stage
+func _stage(obj: Dictionary) -> Vector2:
+	if g.terrain == null or g.terrain.stages.is_empty():
+		return obj["stage"]
+	var st: Array = g.terrain.stages_for(team)
+	if g.rounds.round_n != _lane_round:
+		_lane_round = g.rounds.round_n
+		lane = _pick_lane(st.size())
+		lane_brush = g.terrain.brush_at(st[lane])
+		_check_brush = g.rng.randf() < aware01
+		g.rounds.note_lane(team, lane)
+	return st[lane]
+
+## centre half the time; after a lost round, try something different (a better decision maker
+## changes lanes more reliably), otherwise a coin flip between the two ambush flanks
+func _pick_lane(n: int) -> int:
+	if n <= 1:
+		return 0
+	var lost := false
+	var h: Array = g.rounds.history
+	if not h.is_empty() and int(h[h.size() - 1]["winner"]) != team:
+		lost = true
+	var prev := lane
+	var r: float = g.rng.randf()
+	var pick: int = 0 if r < 0.5 else (1 + g.rng.randi_range(0, n - 2))
+	if lost and pick == prev and g.rng.randf() < 0.4 + 0.5 * aware01:
+		pick = (prev + 1 + g.rng.randi_range(0, n - 2)) % n
+	return pick
+
+func _update_memory(allies: Array, foes: Array) -> void:
+	if g.terrain == null:
+		ghosts = []
+		check_pos = Vector2.INF
+		return
+	aware01 = _team_aware()
+	for f in foes:
+		last_seen[f.uid] = [f.position, g.t]
+	# memory span grows with awareness: 1.5 s (forgets at once) .. 7 s
+	var span: float = lerpf(1.5, 7.0, aware01)
+	ghosts = []
+	check_pos = Vector2.INF
+	var best_d := 1e9
+	var c := _centroid(allies, g.home_pos(team))
+	for e in _alive(1 - team):
+		if foes.has(e) or not last_seen.has(e.uid):
+			continue
+		var ls: Array = last_seen[e.uid]
+		if g.t - float(ls[1]) > span:
+			continue
+		ghosts.append([e, ls[0]])
+		# someone vanished into a brush near us: the frontline goes to check it
+		var b: int = g.terrain.brush_at(ls[0])
+		if b >= 0:
+			var bp: Vector2 = g.terrain.brush[b][0]
+			var dd: float = bp.distance_to(c)
+			if dd < 700.0 and dd < best_d:
+				best_d = dd
+				check_pos = bp
+	# enemies we haven't seen at all (an ambush?): scout the nearest brush before the core opens
+	if check_pos == Vector2.INF and _check_brush and foes.size() + ghosts.size() < _alive(1 - team).size():
+		var obj: Dictionary = g.objective(team)
+		if not obj.is_empty() and not bool(obj["open"]):
+			for i in g.terrain.brush.size():
+				var bp2: Vector2 = g.terrain.brush[i][0]
+				var dd2: float = bp2.distance_to(c)
+				if dd2 > 650.0 or dd2 >= best_d:
+					continue
+				var ours := false
+				for a in allies:
+					if g.terrain.brush_at(a.position) == i:
+						ours = true
+				if not ours:
+					best_d = dd2
+					check_pos = bp2
 
 func in_danger(a) -> bool:
 	return peel.has(a) or (float(a.hp) / float(a.max_hp) < 0.4 and g.t - float(a.last_hurt) < 1.5)

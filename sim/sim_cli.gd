@@ -18,6 +18,7 @@ extends SceneTree
 ##   --runes_b r=n,..
 ##   --sig_a id,..    rounds: signature abilities for team A (applied to the matching hero)
 ##   --sig_b id,..
+##   --map id         rounds: map (game/maps.gd), default core_pillars; core_open = no terrain
 ##   --mirror         team B gets exactly team A's heroes (isolates player ability from the draft)
 ##   --ai_a k=v,...   tuning: override raw AI parameters of team A (react, dodge, aim_err, combo, aware_noise,
 ##                    obj_discipline, decide_err, follow, engage_delay), e.g. --ai_a dodge=0
@@ -39,7 +40,7 @@ var trace_every := 600
 func _initialize() -> void:
 	opt = {"mode": "rounds", "games": "10", "seed": "1", "a": ",,", "b": ",,", "diff": "1", "check": false, "out": "",
 		"attr_a": "11", "attr_b": "11", "set_a": "", "set_b": "", "prof_a": "60", "prof_b": "60",
-		"runes_a": "", "runes_b": "", "sig_a": "", "sig_b": "", "trace_every": "600", "quiet": false, "mirror": false, "ai_a": "", "ai_b": ""}
+		"runes_a": "", "runes_b": "", "sig_a": "", "sig_b": "", "trace_every": "600", "quiet": false, "mirror": false, "ai_a": "", "ai_b": "", "map": "core_pillars"}
 	var args := OS.get_cmdline_user_args()
 	var i := 0
 	while i < args.size():
@@ -163,7 +164,7 @@ func play(mseed: int) -> Dictionary:
 		b = a.duplicate()
 	var rounds_mode := str(opt["mode"]) == "rounds"
 	if rounds_mode:
-		gm._start_rounds(a, b, int(opt["diff"]), mseed, {"human": false,
+		gm._start_rounds(a, b, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
 			"profiles": [_profiles("a", a), _profiles("b", b)], "runes": [_runes("a", a), _runes("b", b)]})
 	else:
 		gm._start_arena(a, b, int(opt["diff"]), mseed)

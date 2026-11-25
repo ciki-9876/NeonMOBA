@@ -272,6 +272,9 @@ func tick_world(d: float) -> void:
 			var n: int = maxi(1, int(ceil(step / 30.0)))
 			for k in n:
 				var p: Vector2 = p0 + dir * step * float(k + 1) / float(n)
+				if g.blocked_at(p):
+					done = true
+					break
 				for u in g.foes_in(h.team, p, float(sh["w"]) / 2.0):
 					if sh["hit"].has(u):
 						continue

@@ -4,6 +4,7 @@ extends Node
 
 const C = preload("res://game/consts.gd")
 const Rounds = preload("res://game/rounds.gd")
+const Maps = preload("res://game/maps.gd")
 const Unit = preload("res://unit.gd")
 const Hero = preload("res://hero.gd")
 const HeroAI = preload("res://hero_ai.gd")
@@ -39,6 +40,8 @@ var menu_surv: Control
 var menu_arena: Control
 var arena_opts: Array = []
 var diff_opt: OptionButton
+var map_opt: OptionButton        # round mode: which map (game/maps.gd)
+var map_lbl: Label
 # ============================================================ menus
 func _menu_btn(text: String, w: float, h: float, size: int) -> Button:
 	var b := Button.new()
@@ -139,7 +142,7 @@ func _build_menu() -> void:
 			arena_opts.append(ob)
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 20)
-	hd._place(bottom, Control.PRESET_CENTER_BOTTOM, -330, -150, 660, 50)
+	hd._place(bottom, Control.PRESET_CENTER_BOTTOM, -440, -150, 880, 50)
 	menu_arena.add_child(bottom)
 	var dl := hd._label(18, Color(0.8, 0.8, 1.0))
 	dl.text = "AI 难度"
@@ -153,6 +156,18 @@ func _build_menu() -> void:
 		diff_opt.add_item(nm)
 	diff_opt.select(1)
 	bottom.add_child(diff_opt)
+	map_lbl = hd._label(18, Color(0.8, 0.8, 1.0))
+	map_lbl.text = "地图"
+	bottom.add_child(map_lbl)
+	map_opt = OptionButton.new()
+	map_opt.focus_mode = Control.FOCUS_NONE
+	map_opt.custom_minimum_size = Vector2(170, 40)
+	map_opt.add_theme_font_override("font", vw.ui_font)
+	map_opt.add_theme_font_size_override("font_size", 17)
+	for mid in Maps.ORDER:
+		map_opt.add_item(str(Maps.MAPS[mid]["name"]))
+	map_opt.select(0)
+	bottom.add_child(map_opt)
 	var go := _menu_btn("开始对战", 200, 48, 22)
 	go.pressed.connect(_start_arena_from_menu)
 	bottom.add_child(go)
@@ -237,6 +252,8 @@ func _open_select(m: int) -> void:
 	menu_arena.visible = m == C.M.ARENA or m == C.M.ROUNDS
 	hd.center_lbl.label_settings.font_size = 56
 	hd.center_lbl.text = {C.M.SURVIVAL: "选择英雄", C.M.ARENA: "3V3 英雄竞技场", C.M.ROUNDS: "回合制 3V3"}[m]
+	map_opt.visible = m == C.M.ROUNDS
+	map_lbl.visible = m == C.M.ROUNDS
 	if m == C.M.ROUNDS:
 		arena_rule.text = "先赢 %d 个回合获胜 · 每回合开局购买装备 · 中央核心开放后占满或全歼对手赢下回合 · 回合内不复活、没有升级" % Rounds.ROUNDS_TO_WIN
 	elif m == C.M.ARENA:
@@ -257,6 +274,6 @@ func _start_arena_from_menu() -> void:
 	gm._fill_random(a)
 	gm._fill_random(b)
 	if sel_mode == C.M.ROUNDS:
-		gm._start_rounds(a, b, diff_opt.selected)
+		gm._start_rounds(a, b, diff_opt.selected, -1, {"map": str(Maps.ORDER[map_opt.selected])})
 	else:
 		gm._start_arena(a, b, diff_opt.selected)

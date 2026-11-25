@@ -76,6 +76,9 @@ var mods_stats := {}
 ## measurement for the batch simulator (sim/sim_cli.gd): damage, skillshots, telegraph hits, ...
 var stats := {}
 var _prev_pos := Vector2.ZERO
+var _path := PackedVector2Array()
+var _path_goal := Vector2.INF
+var _path_t := -99.0
 
 # ============================================================ setup
 func setup(game, id: String, tm: int, player: bool) -> void:
@@ -379,12 +382,14 @@ func cast_error(s: String, tgt) -> String:
 		return "魔法不足"
 	if st["type"] == "unit" and not is_foe(tgt):
 		return "需要选择一个对方单位"
+	if st["type"] == "unit" and not g.has_los(position, tgt.position):
+		return "被地形挡住了"
 	if st["type"] == "ally" and not is_ally(tgt):
 		return "需要选择一个友方英雄"
 	return str(kit.check(s, tgt))
 
 func is_foe(u) -> bool:
-	return u != null and is_instance_valid(u) and u.team != team and u.targetable()
+	return u != null and is_instance_valid(u) and u.team != team and u.targetable() and g.visible_to(u, team)
 
 func is_ally(u) -> bool:
 	return u != null and is_instance_valid(u) and u.team == team and not u.dead and bool(u.is_hero)
@@ -577,8 +582,23 @@ func _turn_to(ang: float, d: float) -> bool:
 	face = rotate_toward(face, ang, float(def["turn"]) * d)
 	return absf(angle_difference(face, ang)) < 0.2
 
+## next point to walk toward on the way to p: straight when the line is clear, otherwise the path
+func _steer_point(p: Vector2) -> Vector2:
+	if g.terrain == null or not g.terrain.seg_blocked(position, p, radius):
+		_path = PackedVector2Array()
+		return p
+	if _path.is_empty() or _path_goal.distance_to(p) > 48.0 or g.t - _path_t > 0.8:
+		_path = g.terrain.path(position, p, radius + 2.0)
+		_path_goal = p
+		_path_t = g.t
+	while _path.size() > 1 and (position.distance_to(_path[0]) < 14.0 or not g.terrain.seg_blocked(position, _path[1], radius)):
+		_path.remove_at(0)
+	return _path[0] if not _path.is_empty() else p
+
 func _move_to(p: Vector2, d: float) -> bool:
-	var to := p - position
+	if (p - position).length() < 8.0:
+		return true
+	var to := _steer_point(p) - position
 	if has_buff("root"):
 		_turn_to(to.angle(), d)
 		return false
@@ -597,7 +617,7 @@ func _attack_logic(tgt, d: float, chase: bool) -> void:
 	if atk_phase != 0:
 		return
 	var dist: float = position.distance_to(tgt.position) - float(tgt.radius)
-	if dist > atk_range():
+	if dist > atk_range() or not g.has_los(position, tgt.position):
 		if chase:
 			_move_to(tgt.position, d)
 		return
@@ -609,6 +629,7 @@ func _attack_logic(tgt, d: float, chase: bool) -> void:
 
 func _fire_attack(tgt) -> void:
 	recoil = 7.0
+	g.reveal(self)
 	var info := {"proc": false, "bonus": 0.0, "ls": 0.0}
 	kit.on_attack_fire(tgt, info)
 	var dmg: float = atk_dmg() * g.rng.randf_range(0.95, 1.05)
@@ -688,6 +709,7 @@ func _cast_logic(d: float) -> void:
 	mana -= sv(s, "mana")
 	cds[s] = skill_cd(s)
 	cmd = C.IDLE
+	g.reveal(self)
 	kit.cast(s, cast_target if unit_cast else null, tpos)
 	kit.on_cast(s)
 	g.on_hero_cast(self, s)
@@ -697,7 +719,10 @@ func cast_point_total() -> float:
 
 # ============================================================ dash (used by kits)
 func start_dash(to: Vector2, speed: float, cb: Callable) -> void:
-	dash = {"to": g.clamp_pos(to, radius), "speed": speed, "cb": cb}
+	var dest: Vector2 = g.clamp_pos(to, radius)
+	if g.terrain != null:
+		dest = g.terrain.sweep(position, dest, radius)   # dashes stop at walls and pillars
+	dash = {"to": dest, "speed": speed, "cb": cb}
 	atk_phase = 0
 	cast_t = -1.0
 

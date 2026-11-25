@@ -44,6 +44,7 @@ var loss_streak := [0, 0]
 var capture := [0.0, 0.0]
 var last_winner := -1
 var last_reason := ""
+var lanes := [-1, -1]               # staging lane each team picked this round (team AI)
 var history: Array = []          # [{round, winner, reason, time}]
 
 func setup(game) -> void:
@@ -102,9 +103,13 @@ func auto_learn(h) -> void:
 
 var _kills_at_start := [0, 0]
 
+func note_lane(tm: int, l: int) -> void:
+	lanes[tm] = l
+
 func start_round() -> void:
 	round_n += 1
 	_kills_at_start = g.team_kills.duplicate()
+	lanes = [-1, -1]
 	phase = "buy"
 	phase_t = 0.0
 	capture = [0.0, 0.0]
@@ -208,7 +213,7 @@ func end_round(w: int, reason: String) -> void:
 	var kills_now: Array = g.team_kills.duplicate()
 	history.append({"round": round_n, "winner": w, "reason": reason, "time": snappedf(g.t, 0.1), "live": snappedf(phase_t, 0.1),
 		"kills": [kills_now[0] - _kills_at_start[0], kills_now[1] - _kills_at_start[1]], "alive": [_alive(0), _alive(1)],
-		"capture": [snappedf(capture[0], 0.01), snappedf(capture[1], 0.01)]})
+		"capture": [snappedf(capture[0], 0.01), snappedf(capture[1], 0.01)], "lanes": lanes.duplicate()})
 	phase = "post"
 	phase_t = 0.0
 	last_winner = w
