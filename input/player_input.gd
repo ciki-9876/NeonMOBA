@@ -45,6 +45,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 			if k == KEY_1: mnu._open_select(C.M.SURVIVAL)
 			elif k == KEY_2: mnu._open_select(C.M.ARENA)
 			elif k == KEY_3: mnu._open_select(C.M.ROUNDS)
+			elif k == KEY_4: mnu.open_exp3c()
 			return
 		if gm.state == C.S.SELECT:
 			if k == KEY_ESCAPE: mnu._show_menu()

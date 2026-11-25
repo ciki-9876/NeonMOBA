@@ -65,7 +65,7 @@ func _build_menu() -> void:
 	# main
 	menu_main = VBoxContainer.new()
 	menu_main.add_theme_constant_override("separation", 14)
-	hd._place(menu_main, Control.PRESET_CENTER, -200, -20, 400, 340)
+	hd._place(menu_main, Control.PRESET_CENTER, -200, -40, 400, 420)
 	menu_root.add_child(menu_main)
 	var b1 := _menu_btn("生存模式  ·  30 分钟   [1]", 400, 64, 24)
 	b1.pressed.connect(_open_select.bind(C.M.SURVIVAL))
@@ -76,6 +76,9 @@ func _build_menu() -> void:
 	var b3 := _menu_btn("回合制 3V3 · 新规则原型   [3]", 400, 64, 24)
 	b3.pressed.connect(_open_select.bind(C.M.ROUNDS))
 	menu_main.add_child(b3)
+	var b4 := _menu_btn("3C 实验 · WASD 狙击手   [4]", 400, 64, 24)
+	b4.pressed.connect(open_exp3c)
+	menu_main.add_child(b4)
 	var hint := hd._label(15, Color(0.75, 0.75, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.text = "右键 移动/攻击   A 攻击指令   QWER 技能   Ctrl+QWER 学习\nB 商店（打开时暂停）   C 属性   Tab 计分板   Esc 暂停"
 	menu_main.add_child(hint)
@@ -243,6 +246,10 @@ func _show_menu() -> void:
 	hd.center_lbl.modulate.a = 1.0
 	hd.sub_lbl.modulate.a = 1.0
 	hd.sub_lbl.text = "霓 虹 漂 移\n\n生存最长  %s" % hd._fmt(hd.best)
+
+## 3C experiment: standalone scene (exp3c/), Esc there comes back here
+func open_exp3c() -> void:
+	get_tree().change_scene_to_file("res://exp3c/exp3c.tscn")
 
 func _open_select(m: int) -> void:
 	gm.state = C.S.SELECT
