@@ -43,6 +43,12 @@ const HERO_ROWS2 := [
 	["lumen_q", 32, 32, 1], ["lumen_w", 32, 32, 1], ["lumen_e", 32, 32, 1], ["lumen_r", 32, 32, 1],
 	["seer_q", 32, 32, 1], ["seer_w", 32, 32, 1], ["seer_e", 32, 32, 1], ["seer_r", 32, 32, 1],
 ]
+const HERO_ROWS3 := [
+	["frost", 18, 18, 2], ["ember", 18, 18, 2], ["tide", 18, 18, 2],
+	["frost_q", 32, 32, 1], ["frost_w", 32, 32, 1], ["frost_e", 32, 32, 1], ["frost_r", 32, 32, 1],
+	["ember_q", 32, 32, 1], ["ember_w", 32, 32, 1], ["ember_e", 32, 32, 1], ["ember_r", 32, 32, 1],
+	["tide_q", 32, 32, 1], ["tide_w", 32, 32, 1], ["tide_e", 32, 32, 1], ["tide_r", 32, 32, 1],
+]
 const HERO_ROWS := [
 	["blade", 18, 18, 2], ["b_icon_q", 32, 32, 1], ["b_icon_w", 32, 32, 1], ["b_icon_e", 32, 32, 1], ["b_icon_r", 32, 32, 1],
 	["mark", 9, 9, 1],
@@ -317,6 +323,7 @@ func _load_assets() -> void:
 	_slice("res://art/sprites2.png", ATLAS2_ROWS)
 	_slice("res://art/heroes.png", HERO_ROWS)
 	_slice("res://art/heroes2.png", HERO_ROWS2)
+	_slice("res://art/heroes3.png", HERO_ROWS3)
 	var icons: Texture2D = load("res://art/items.png")
 	var order: Array = ItemsDB.ORDER
 	for i in order.size():
@@ -697,10 +704,18 @@ func _build_menu() -> void:
 	cards.columns = 3
 	cards.add_theme_constant_override("h_separation", 14)
 	cards.add_theme_constant_override("v_separation", 14)
-	_place(cards, Control.PRESET_CENTER, -611, -200, 1222, 486)
-	menu_surv.add_child(cards)
+	# 9+ heroes no longer fit on a 1280x720 screen: the card grid scrolls (mouse wheel)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_place(scroll, Control.PRESET_CENTER, -630, -300, 1260, 590)
+	menu_surv.add_child(scroll)
+	scroll.add_child(cards)
 	for id in HeroesDB.ORDER:
 		cards.add_child(_hero_card(str(id)))
+	var scroll_hint := _label(14, Color(0.7, 0.7, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
+	scroll_hint.text = "鼠标滚轮上下翻页，共 %d 名英雄" % HeroesDB.ORDER.size()
+	_place(scroll_hint, Control.PRESET_CENTER_BOTTOM, -200, -100, 400, 24)
+	menu_surv.add_child(scroll_hint)
 	var back1 := _menu_btn("返回", 160, 44, 18)
 	_place(back1, Control.PRESET_CENTER_BOTTOM, -80, -58, 160, 44)
 	back1.pressed.connect(_show_menu)
