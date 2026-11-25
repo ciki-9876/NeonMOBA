@@ -199,7 +199,10 @@ func _chain_ls() -> LabelSettings:
 
 # ============================================================ drawing
 func _draw_floor() -> void:
-	if gm.mode != C.M.ARENA or gm.state == C.S.MENU or gm.state == C.S.SELECT:
+	if gm.mode == C.M.SURVIVAL or gm.state == C.S.MENU or gm.state == C.S.SELECT:
+		return
+	if gm.mode == C.M.ROUNDS:
+		_draw_rounds_floor()
 		return
 	var o := floor_layer
 	o.draw_circle(Vector2.ZERO, C.ARENA_R, Color(0.05, 0.03, 0.12, 0.55))
@@ -216,7 +219,7 @@ func _draw_floor() -> void:
 		o.draw_arc(spot, 46.0, 0, TAU, 32, Color(1.4, 1.4, 0.6, 0.5), 2.0)
 
 func _draw_minimap() -> void:
-	if gm.mode != C.M.ARENA or gm.state == C.S.MENU:
+	if gm.mode == C.M.SURVIVAL or gm.state == C.S.MENU:
 		return
 	var m := hd.minimap
 	var c := Vector2(92, 92)
@@ -225,6 +228,8 @@ func _draw_minimap() -> void:
 	m.draw_arc(c, 88.0, 0, TAU, 64, Color(0.5, 1.0, 2.0, 0.8), 2.0)
 	for tm in 2:
 		m.draw_circle(c + gm.home_pos(tm) * k, C.FOUNTAIN_R * k, Color(0.3, 1.4, 1.0, 0.4) if tm == 0 else Color(1.6, 0.3, 0.3, 0.4))
+	if gm.rounds != null:
+		m.draw_arc(c + gm.rounds.core_pos() * k, gm.rounds.CORE_R * k, 0, TAU, 24, Color(1.8, 1.8, 1.8, 0.9) if gm.rounds.core_open() else Color(0.6, 0.6, 0.8, 0.6), 2.0)
 	for r in gm.runes:
 		m.draw_circle(c + r.position * k, 3.0, Color(1.6, 1.6, 0.6))
 	for h in gm.heroes:
@@ -240,6 +245,8 @@ func _draw_overlay() -> void:
 	if gm.state == C.S.MENU or gm.state == C.S.SELECT: return
 	var o := overlay
 	var tick := Time.get_ticks_msec() * 0.001
+	if gm.rounds != null:
+		_draw_rounds_overlay(o, tick)
 	for z in gm.zones:
 		var p: Vector2 = z["pos"]
 		var r: float = z["r"]
@@ -564,6 +571,45 @@ func frame(delta: float) -> void:
 	grid.pulse = maxf(0.0, grid.pulse - delta * 1.5)
 	grid.queue_redraw()
 	overlay.queue_redraw()
-	if gm.mode == C.M.ARENA:
+	if gm.mode != C.M.SURVIVAL:
 		hd.minimap.queue_redraw()
+
+# ============================================================ round mode drawing
+func _draw_rounds_floor() -> void:
+	var o := floor_layer
+	o.draw_circle(Vector2.ZERO, C.ARENA_R, Color(0.05, 0.03, 0.12, 0.55))
+	o.draw_arc(Vector2.ZERO, C.ARENA_R, 0, TAU, 160, Color(0.6, 1.2, 2.4, 0.9), 6.0)
+	o.draw_arc(Vector2.ZERO, C.ARENA_R + 14.0, 0, TAU, 160, Color(1.6, 0.4, 2.0, 0.5), 2.0)
+	for tm in 2:
+		var hp := gm.home_pos(tm)
+		var c := Color(0.3, 1.6, 1.2) if tm == 0 else Color(2.0, 0.4, 0.4)
+		o.draw_circle(hp, 170.0, Color(c.r * 0.2, c.g * 0.2, c.b * 0.2, 0.35))
+		o.draw_arc(hp, 40.0, 0, TAU, 32, c, 4.0)
+
+## the core: locked (grey) / open (pulsing) with each team's capture arc; spawn walls during the buy phase
+func _draw_rounds_overlay(o: Node2D, tick: float) -> void:
+	var r = gm.rounds
+	var p: Vector2 = r.core_pos()
+	var rad: float = r.CORE_R
+	if r.core_open():
+		var pulse := 0.5 + 0.5 * sin(tick * 4.0)
+		o.draw_circle(p, rad, Color(1.4, 1.4, 1.8, 0.06 + 0.04 * pulse))
+		o.draw_arc(p, rad, 0, TAU, 96, Color(2.2, 2.2, 2.6, 0.7 + 0.3 * pulse), 3.0)
+	else:
+		o.draw_circle(p, rad, Color(0.3, 0.3, 0.45, 0.08))
+		for i in 24:
+			var a0 := TAU * i / 24.0
+			o.draw_arc(p, rad, a0, a0 + TAU / 48.0, 4, Color(0.6, 0.6, 0.9, 0.6), 2.0)
+		if r.phase == "live":
+			var k: float = clampf(r.phase_t / r.CORE_UNLOCK, 0.0, 1.0)
+			o.draw_arc(p, rad * 0.35, -PI / 2, -PI / 2 + TAU * k, 48, Color(1.6, 1.6, 2.2, 0.8), 4.0)
+	for tm in 2:
+		var cap: float = r.capture[tm]
+		if cap > 0.0:
+			var col := Color(0.3, 1.8, 2.2) if tm == 0 else Color(2.4, 0.4, 0.4)
+			o.draw_arc(p, rad + 10.0 + tm * 9.0, -PI / 2, -PI / 2 + TAU * cap, 96, col, 6.0)
+	if r.phase == "buy":
+		for tm in 2:
+			var c := Color(0.3, 1.6, 1.2, 0.8) if tm == 0 else Color(2.0, 0.4, 0.4, 0.8)
+			o.draw_arc(gm.home_pos(tm), r.SPAWN_R, 0, TAU, 64, c, 3.0)
 

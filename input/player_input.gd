@@ -44,6 +44,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		if gm.state == C.S.MENU:
 			if k == KEY_1: mnu._open_select(C.M.SURVIVAL)
 			elif k == KEY_2: mnu._open_select(C.M.ARENA)
+			elif k == KEY_3: mnu._open_select(C.M.ROUNDS)
 			return
 		if gm.state == C.S.SELECT:
 			if k == KEY_ESCAPE: mnu._show_menu()
@@ -78,7 +79,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 			else: shp._open_shop()
 			return
 		if k == KEY_TAB:
-			if gm.mode == C.M.ARENA:
+			if gm.mode != C.M.SURVIVAL:
 				hd.board.visible = not hd.board.visible
 				hd._update_board()
 			return

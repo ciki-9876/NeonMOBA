@@ -27,7 +27,7 @@ const ARENA_LEN := 900.0
 
 enum S { MENU, SELECT, PLAY, END }
 
-enum M { SURVIVAL, ARENA }
+enum M { SURVIVAL, ARENA, ROUNDS }
 
 const ATLAS_ROWS := [
 	["player", 16, 16, 2], ["heart", 7, 7, 2], ["chaser", 16, 16, 2], ["dasher", 16, 16, 2],

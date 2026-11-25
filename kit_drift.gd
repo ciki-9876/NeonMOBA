@@ -9,6 +9,10 @@ func reset() -> void:
 	attack_count = 0
 	empowered = false
 
+func round_reset() -> void:
+	reset()
+	sings.clear()
+
 func stat_mods(n: Dictionary) -> void:
 	if int(h.sk["e"]) > 0:
 		n["as"] = float(n["as"]) + h.sv("e", "as")

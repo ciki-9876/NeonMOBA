@@ -14,10 +14,16 @@ const HeroShot = preload("res://game/hero_shot.gd")
 const EShot = preload("res://game/enemy_shot.gd")
 const Grid = preload("res://view/grid.gd")
 const Ring = preload("res://view/ring.gd")
+const Rounds = preload("res://game/rounds.gd")
+const Profiles = preload("res://game/profiles.gd")
+const RunesDB = preload("res://game/runes_db.gd")
 
 signal world_cleared
 signal match_started
 signal match_ended(win: bool)
+signal round_started(n: int)
+signal round_live(n: int)
+signal round_ended(n: int, winner: int, reason: String)
 
 ## optional presentation / UI modules (null when running headless)
 var vw = null
@@ -28,6 +34,8 @@ var shp = null
 const DT := 1.0 / 60.0
 var seed_used := 0
 var next_uid := 0
+## round-mode rules (game/rounds.gd); null in the other modes
+var rounds = null
 
 # ============================================================ state
 var state := C.S.MENU
@@ -124,6 +132,7 @@ func _clear_world() -> void:
 	seen_kinds.clear()
 	team0.clear()
 	player = null
+	rounds = null
 	brains = {}
 	autopilot = false
 	world_cleared.emit()
@@ -221,7 +230,77 @@ func _start_arena(a: Array, b: Array, diff: int, match_seed := -1) -> void:
 	toast("你有 1 个技能点：Ctrl+Q/W/E 学习。B 打开商店（游戏暂停），Tab 查看计分板。", Color(1.0, 0.9, 0.4), 9.0)
 	toast("连招：%s" % player.def["combo"], Color(0.7, 1.0, 0.7), 9.0)
 
+## round-based 3V3 (stage 1 core mode).
+## setup (all optional):
+##   "profiles": [[p, p, p], [p, p, p]]  players per team (game/profiles.gd); default = from difficulty
+##   "runes":    [{hero_id: {rune_id: stacks}}, {...}]   team rune pages (game/runes_db.gd)
+##   "human":    false to let the AI play every hero (headless simulation)
+func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {}) -> void:
+	_clear_world()
+	reseed(match_seed)
+	mode = C.M.ROUNDS
+	difficulty = diff
+	last_cfg = {"mode": C.M.ROUNDS, "a": a, "b": b, "diff": diff, "setup": setup}
+	var human: bool = bool(setup.get("human", true))
+	var profs: Array = setup.get("profiles", [[], []])
+	var runes: Array = setup.get("runes", [{}, {}])
+	for tm in 2:
+		var ids: Array = a if tm == 0 else b
+		for i in ids.size():
+			var hid := str(ids[i])
+			var is_p: bool = tm == 0 and i == 0
+			var h := _make_hero(hid, tm, is_p and human, diff)
+			var tp: Array = profs[tm] if tm < profs.size() else []
+			h.profile = tp[i] if i < tp.size() else Profiles.from_difficulty(diff)
+			var page: Dictionary = (runes[tm] if tm < runes.size() else {}).get(hid, {})
+			var mods: Array = RunesDB.rune_mods(page, hid)
+			mods.append_array(RunesDB.signature_mods(Profiles.signature(h.profile, hid), hid))
+			h.apply_mods(mods)
+			if h.ai != null:
+				h.ai.apply_profile(h.profile)
+			if is_p:
+				player = h
+	brains = {0: TeamAI.new(), 1: TeamAI.new()}
+	brains[0].setup(self, 0)
+	brains[1].setup(self, 1)
+	team_kills = [0, 0]
+	rounds = Rounds.new()
+	rounds.setup(self)
+	rounds.start_map()
+	_begin_common()
+	if not human:
+		set_autopilot(true)
+	toast("回合制 3V3：先赢 %d 个回合获胜。每回合开局有购买时间；第 %d 秒起中央核心开放，站在核心里且没有对手争夺就会推进占领进度，占满或全歼对手即赢下回合。" % [Rounds.ROUNDS_TO_WIN, int(Rounds.CORE_UNLOCK)], Color(0.7, 0.95, 1.0), 10.0)
+	toast("回合内阵亡不会复活；没有升级，只有装备成长。赢一回合 +%d，输一回合 +%d 起（连败递增），输掉的一方可以原价卖出一件装备。" % [int(Rounds.WIN_PAY), int(Rounds.LOSS_PAY[0])], Color(1.0, 0.9, 0.4), 10.0)
+
+## telegraphed areas and skillshots of the other team, for AI dodging (kit.threats())
+func threats_for(tm: int) -> Array:
+	var out := []
+	for h in heroes:
+		if h.team != tm:
+			out.append_array(h.kit.threats())
+	return out
+
+## the team objective for the AI brain (round mode); {} when there is none
+func objective(tm: int) -> Dictionary:
+	if rounds == null or rounds.phase != "live":
+		return {}
+	var core: Vector2 = rounds.core_pos()
+	var home := home_pos(tm)
+	var mine: float = rounds.capture[tm]
+	var theirs: float = rounds.capture[1 - tm]
+	var urgency := 0.0
+	if rounds.core_open():
+		urgency = 0.5
+		if theirs >= 0.35 or (rounds.time_left() < 20.0 and mine <= theirs) or rounds.phase_t >= Rounds.OVERTIME_AT:
+			urgency = 1.0
+	return {"pos": core, "open": rounds.core_open(), "urgency": urgency,
+		"stage": core + (home - core).normalized() * (Rounds.CORE_R + 140.0)}
+
 func _restart() -> void:
+	if last_cfg.get("mode", -1) == C.M.ROUNDS:
+		_start_rounds(last_cfg["a"], last_cfg["b"], int(last_cfg["diff"]), -1, last_cfg.get("setup", {}))
+		return
 	if last_cfg.get("mode", -1) == C.M.ARENA:
 		_start_arena(last_cfg["a"], last_cfg["b"], int(last_cfg["diff"]))
 	else:
@@ -333,7 +412,7 @@ func _team_heroes(tm: int) -> Array:
 	return out
 
 func on_level_up(h) -> void:
-	if h.is_player:
+	if h.is_player and mode != C.M.ROUNDS:   # round mode sets the level at map start: no fanfare
 		sfx("levelup", 1.0, -3.0)
 		_ring(h.position, 10, 180, 0.5, Color(1.8, 1.6, 0.4), 8)
 		_popup(h.position + Vector2(-40, -60), "LEVEL %d" % h.level, "big")
@@ -466,6 +545,12 @@ func damage(src, tgt, amount: float, kind: String, dtype := "magic", kb := Vecto
 		if tgt.god or (tgt.is_player and god):
 			return 0.0
 		tgt.hp -= a
+		tgt.stat_add("dmg_taken", a)
+		if src_hero:
+			src.stat_add("dmg_hero", a)
+			var bf = brain(src.team)
+			if bf != null and bf.focus == tgt:
+				src.stat_add("focus_dmg", a)
 		tgt.log_damage(src)
 		tgt.last_hurt = t
 		if kind != "dot":
@@ -529,17 +614,23 @@ func _hero_died(v, killer) -> void:
 	v.dmg_log = {}
 	var kt: int = 1 - int(v.team)
 	team_kills[kt] += 1
+	if k != null:
+		k.kills += 1
+		k.streak += 1
+	for hh in helpers:
+		hh.assists += 1
+	if mode == C.M.ROUNDS:
+		rounds.on_hero_killed(v, k, helpers)
+		_kill_feed(v, k, kt)
+		return
 	var bounty: float = 90.0 + v.level * 6.0 + minf(victim_streak, 6) * 40.0
 	if team_kills[1 - kt] - team_kills[kt] >= 5:
 		bounty *= 1.5  # comeback bounty for the team that is behind
 	if k != null:
-		k.kills += 1
-		k.streak += 1
 		k.gold += bounty
 		if k.is_player:
 			_popup(v.position + Vector2(-20, -50), "+%d" % int(bounty), "gold")
 	for hh in helpers:
-		hh.assists += 1
 		hh.gold += 40.0 + v.level * 5.0
 	# shared xp
 	var share := []
@@ -551,8 +642,13 @@ func _hero_died(v, killer) -> void:
 		xp_total *= 1.5
 	for h in share:
 		h.gain_xp(xp_total / float(share.size()) * 1.4 + xp_total * 0.15)
-	# feed
-	var kname: String = k.display_name() if k != null else "泉水"
+	_kill_feed(v, k, kt)
+	if team_kills[kt] >= C.ARENA_KILLS:
+		winner = kt
+		_end(kt == 0)
+
+func _kill_feed(v, k, kt: int) -> void:
+	var kname: String = k.display_name() if k != null else ("泉水" if mode == C.M.ARENA else "环境")
 	var who_k: String = ("你" if k != null and k.is_player else kname)
 	var who_v: String = ("你" if v.is_player else v.display_name())
 	var fc := Color(0.5, 1.6, 1.8) if kt == 0 else Color(2.0, 0.55, 0.55)
@@ -565,9 +661,6 @@ func _hero_died(v, killer) -> void:
 	if v.is_player:
 		_flash(Color(0.6, 0.0, 0.1, 0.35))
 		shake = 14.0
-	if team_kills[kt] >= C.ARENA_KILLS:
-		winner = kt
-		_end(kt == 0)
 
 func _update_arena(d: float) -> void:
 	for h in heroes:
@@ -1308,6 +1401,12 @@ func sell_cheapest(h) -> void:
 ## returns "" on success, otherwise the reason
 func buy_for(h, id: String, verbose: bool) -> String:
 	var it: Dictionary = ItemsDB.DB[id]
+	if rounds != null:
+		var why: String = rounds.shop_block_reason()
+		if why != "":
+			return why
+		if it["cat"] == "consumable" and (it["special"] as Dictionary).has("c_xp"):
+			return "回合制没有等级成长，不能使用经验书"
 	if it["cat"] == "consumable":
 		var spc: Dictionary = it["special"]
 		if spc.has("shard") and h.shard_owned:
@@ -1353,8 +1452,12 @@ func _consume(h, spc: Dictionary) -> void:
 
 func sell_for(h, i: int) -> float:
 	if i >= h.inv.size(): return 0.0
+	if rounds != null and rounds.shop_block_reason() != "": return 0.0
 	var id: String = h.inv[i]
 	var v := float(ItemsDB.DB[id]["cost"]) * 0.5
+	if rounds != null and h.refund_tokens > 0:
+		h.refund_tokens -= 1
+		v = float(ItemsDB.DB[id]["cost"])
 	h.gold += v
 	h.inv.remove_at(i)
 	h.recalc()
@@ -1401,6 +1504,8 @@ func set_autopilot(on: bool) -> void:
 	if on and player != null and player.ai == null:
 		var ai := HeroAI.new()
 		ai.setup(player, self, maxi(difficulty, 1))
+		if not player.profile.is_empty():
+			ai.apply_profile(player.profile)
 		player.ai = ai
 
 func step(d: float) -> void:
@@ -1413,6 +1518,8 @@ func step(d: float) -> void:
 				player.gold += 1.6 * d
 			if t >= C.GAME_LEN:
 				_end(true)
+		elif mode == C.M.ROUNDS:
+			rounds.update(d)
 		else:
 			_update_arena(d)
 	elif state == C.S.END:

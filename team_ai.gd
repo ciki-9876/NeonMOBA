@@ -1,7 +1,7 @@
 extends RefCounted
 ## Team brain: one per team. Reads the whole fight and publishes a shared plan that every
 ## hero AI on the team follows (the player is counted as an ally but never commanded):
-##   intent  : group (form up) / fight / hold (wait for respawns) / retreat
+##   intent  : group (form up) / fight / hold (wait for respawns) / retreat / setup (hold the line until the objective opens)
 ##   focus   : the enemy hero the whole team should burst
 ##   peel    : ally -> the diver that is on top of it (tanks & supports react)
 ##   engage_ok : whether the backline may commit (the frontline is in, or we are being dived)
@@ -18,6 +18,8 @@ var front := Vector2.ZERO
 var enemy_dir := Vector2.RIGHT
 var my_power := 0.0
 var their_power := 0.0
+var _judge := 1.0
+var _judge_t := 0.0
 
 func setup(game, tm: int) -> void:
 	g = game
@@ -76,9 +78,20 @@ func update(d: float) -> void:
 			near_foes.append(f)
 	my_power = _power(allies)
 	their_power = _power(near_foes)
+	# decision: the team's read of a fight is noisy (average of its players' decision error)
+	var err := 0.0
+	for a in allies:
+		if a.ai != null:
+			err += float(a.ai.decide_err)
+	err /= maxf(1.0, float(allies.size()))
+	if g.t >= _judge_t:
+		_judge_t = g.t + 3.0
+		_judge = exp(g.rng.randfn(0.0, err * 1.2))
+	my_power *= _judge
 	var total_foes := _power(foes)
 	# ---- intent
 	var dist := c.distance_to(ec)
+	var obj: Dictionary = g.objective(team)
 	if foes.is_empty():
 		intent = "group"
 	elif my_power < their_power * 0.4 and not near_foes.is_empty():
@@ -89,6 +102,15 @@ func update(d: float) -> void:
 		intent = "hold"
 	else:
 		intent = "group" if dist > 900.0 else "fight"
+	if not obj.is_empty():
+		# round mode: nobody respawns, so never "hold"; when the objective is urgent, contest it
+		if intent == "hold":
+			intent = "group"
+		if bool(obj["open"]) and float(obj["urgency"]) >= 1.0 and not foes.is_empty():
+			intent = "fight"
+		elif not bool(obj["open"]) and intent != "retreat":
+			# before the core opens: hold the staging line, only take clearly favourable fights
+			intent = "fight" if (not near_foes.is_empty() and my_power >= their_power * 1.3) else "setup"
 	# ---- frontline position
 	var tank = null
 	for h in allies:
@@ -102,12 +124,20 @@ func update(d: float) -> void:
 			front = c.lerp(ec, 0.35) if not foes.is_empty() else c.lerp(Vector2.ZERO, 0.6)
 			if tank != null:
 				front = front.lerp(lead, 0.5)
+			if not obj.is_empty():
+				front = obj["stage"] if not bool(obj["open"]) else obj["pos"]
+		"setup":
+			front = obj["stage"]
 		"fight":
 			front = lead
+			if not obj.is_empty() and bool(obj["open"]):
+				front = obj["pos"]
 		"hold":
 			front = home.lerp(Vector2.ZERO, 0.35)
 		"retreat":
 			front = home
+			if not obj.is_empty():
+				front = home.lerp(obj["stage"], 0.5)   # round mode: fall back, but stay in the fight
 	# ---- focus target: low effective hp, disabled, squishy, close to our front
 	var best = null
 	var bs := -1e9
@@ -154,6 +184,17 @@ func slot(h) -> Vector2:
 	var back := -enemy_dir
 	var side := back.orthogonal()
 	var idx: int = int(h.uid % 3) - 1
+	var obj: Dictionary = g.objective(team)
+	if not obj.is_empty() and bool(obj["open"]) and intent != "retreat":
+		# round mode, core open: everybody stands inside the core (capture needs presence)
+		var core: Vector2 = obj["pos"]
+		var r: float = float(g.rounds.CORE_R) * 0.55
+		match h.role():
+			"tank":
+				return core + enemy_dir * r * 0.5
+			"carry":
+				return core + back * r * 0.6 + side * r * 0.7 * float(idx if idx != 0 else 1)
+		return core + back * r + side * r * 0.5 * float(idx)
 	match h.role():
 		"tank":
 			return front + enemy_dir * (60.0 if intent == "fight" else 0.0)

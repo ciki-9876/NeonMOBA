@@ -26,6 +26,21 @@ var _meta_cache := {}
 func reset() -> void:
 	aura_t = 0.0
 
+func round_reset() -> void:
+	reset()
+	shots.clear()
+	zones.clear()
+
+func threats() -> Array:
+	var out := []
+	# only telegraphs and projectiles: lingering zones are not "dodgeable" (fleeing them abandons the objective)
+	for z in zones:
+		if z["kind"] == "delay":
+			out.append({"kind": "area", "pos": z["pos"], "r": float(z["r"]), "t": float(z["dur"]) - float(z["t"])})
+	for sh in shots:
+		out.append({"kind": "shot", "pos": sh["pos"], "dir": sh["dir"], "w": float(sh["w"]), "speed": float(sh["speed"]), "left": float(sh["left"])})
+	return out
+
 # ------------------------------------------------------------ values
 func val(p, lv: int) -> float:
 	if p == null:
@@ -141,6 +156,9 @@ func _do(e: Dictionary, ctx: Dictionary) -> void:
 			var amt: float = val(e.get("amt", 0.0), lv) + val(e.get("amt_hp", 0.0), lv) * h.max_hp
 			for u in _units(e, ctx):
 				if u.team != h.team:
+					if bool(ctx.get("tele", false)) and u.is_hero:
+						u.stat_add("tele_taken")
+						h.stat_add("tele_hit")
 					g.damage(h, u, amt, str(e.get("kind", "skill")), str(e.get("dtype", "magic")), Vector2.ZERO)
 		"heal":
 			for u in _units(e, ctx):
@@ -210,6 +228,7 @@ func _do(e: Dictionary, ctx: Dictionary) -> void:
 				var gap: float = (h.radius + float(u.radius) + 8.0) if to_caster else float(u.radius) * 0.6
 				g.displace(u, cpos + away * gap, val(e.get("speed", 1600.0), lv))
 		"shot":
+			h.stat_add("shot_fired")
 			shots.append({"pos": ctx["origin"], "dir": ctx["dir"], "speed": val(e.get("speed", 1400.0), lv),
 				"left": val(e.get("len", 900.0), lv), "w": val(e.get("w", 60.0), lv), "col": _col(e),
 				"pierce": bool(e.get("pierce", false)), "then": e.get("then", []), "ctx": ctx.duplicate(), "hit": {}, "trail": []})
@@ -257,6 +276,10 @@ func tick_world(d: float) -> void:
 					if sh["hit"].has(u):
 						continue
 					sh["hit"][u] = true
+					if u.is_hero:
+						if sh["hit"].size() == 1:
+							h.stat_add("shot_hit")
+						u.stat_add("shot_taken")
 					var c2: Dictionary = sh["ctx"].duplicate()
 					c2["target"] = u
 					c2["pos"] = u.position
@@ -283,6 +306,7 @@ func tick_world(d: float) -> void:
 				if float(z["t"]) >= float(z["dur"]):
 					var c3: Dictionary = z["ctx"].duplicate()
 					c3["pos"] = z["pos"]
+					c3["tele"] = true
 					run(z["then"], c3)
 				else:
 					keepz.append(z)

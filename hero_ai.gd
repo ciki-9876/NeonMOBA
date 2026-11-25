@@ -7,6 +7,7 @@ extends RefCounted
 ## The same AI plays any hero, as an ally or as an enemy.
 
 const C_CAST := 5
+const Profiles = preload("res://game/profiles.gd")
 
 var h
 var g
@@ -20,6 +21,31 @@ var shop_t := 0.0
 var cast_lock := 0.0
 var last_cast := ""
 
+# ---- player abilities (game/profiles.gd). Defaults = a neutral 精通 player; apply_profile() sets them.
+## each ability changes concrete behaviour, so a better player measurably plays better:
+##   reaction  -> think interval (react), chance to dodge telegraphs / skillshots (dodge)
+##   mechanics -> skillshot aim error (aim_err), how much combos are valued (combo)
+##   awareness -> noise in target choice (aware_noise)
+##   decision  -> error in the retreat threshold and premature commits (decide_err)
+##   teamwork  -> following the team focus / not stacking disables (follow), engage delay
+##   composure -> swing of all of the above under pressure (match point, last alive)
+var profile := {}
+var stage_i := 2            # proficiency stage: 0 生疏 1 熟悉 2 精通 3 大师
+var dodge := 0.45
+var combo := 1.0
+var aware_noise := 20.0
+var decide_err := 0.3
+var follow := 0.8
+var engage_delay := 0.4
+var _eng_t := 0.0
+var mech01 := 0.5           # mechanics 0..1 (hesitation)
+var lone := 0.15            # teamwork: chance to break formation and fight alone
+var obj_discipline := 0.7   # awareness: chance to stay on the objective instead of chasing
+## personality rolls are held for a while (not re-rolled every think), so thinking faster only
+## means reacting sooner, never flip-flopping more: key -> [value, expires_at]
+var _rolls := {}
+var _pressure := false
+
 func setup(hero, game, difficulty: int) -> void:
 	h = hero
 	g = game
@@ -28,6 +54,64 @@ func setup(hero, game, difficulty: int) -> void:
 	aim_err = [110.0, 50.0, 14.0][difficulty]
 	greed = [0.7, 1.0, 1.2][difficulty]
 	think = g.rng.randf_range(0.0, 0.5)
+	apply_profile(Profiles.from_difficulty(difficulty))
+
+## map a player profile to behaviour parameters (see the table above)
+func apply_profile(p: Dictionary, swing := {}) -> void:
+	profile = p
+	var e: Dictionary = Profiles.effective(p, str(h.hid), swing)
+	stage_i = Profiles.STAGES.find(Profiles.stage(p, str(h.hid)))
+	react = lerpf(0.45, 0.10, e["reaction"])
+	dodge = lerpf(0.0, 0.9, e["reaction"])
+	aim_err = lerpf(140.0, 6.0, e["mechanics"])
+	combo = lerpf(0.3, 1.3, e["mechanics"])
+	mech01 = e["mechanics"]
+	aware_noise = lerpf(70.0, 0.0, e["awareness"])
+	obj_discipline = lerpf(0.35, 1.0, e["awareness"])
+	decide_err = lerpf(0.6, 0.04, e["decision"])
+	greed = 1.0
+	follow = lerpf(0.35, 1.0, e["teamwork"])
+	engage_delay = lerpf(1.2, 0.0, e["teamwork"])
+	lone = lerpf(0.45, 0.0, e["teamwork"])
+	# tuning hook: profile["ai_over"] = {"dodge": 0.0, ...} overrides any parameter above (sim --ai_a)
+	var over: Dictionary = p.get("ai_over", {})
+	for k in over:
+		set(k, float(over[k]))
+
+## a random value in [0, 1) that stays the same for `period` seconds (per key)
+func _roll(key, period := 2.5) -> float:
+	var r = _rolls.get(key)
+	if r == null or g.t >= float(r[1]):
+		r = [g.rng.randf(), g.t + period * g.rng.randf_range(0.8, 1.2)]
+		_rolls[key] = r
+	return float(r[0])
+
+## a gaussian value that stays the same for `period` seconds (per key)
+func _roll_n(key, sd: float, period := 2.5) -> float:
+	var u := _roll(key, period)
+	return sd * (sqrt(-2.0 * log(maxf(1e-6, _roll([key, "b"], period)))) * cos(TAU * u))
+
+## composure: when the pressure state changes, re-roll a swing on every ability
+func _check_pressure() -> void:
+	var p := false
+	var r = g.rounds
+	if r != null:
+		p = maxi(r.score[0], r.score[1]) >= r.ROUNDS_TO_WIN - 1
+		var alive := 0
+		for a in g.heroes:
+			if a.team == h.team and not a.dead:
+				alive += 1
+		p = p or alive == 1
+	if p == _pressure or profile.is_empty():
+		return
+	_pressure = p
+	var swing := {}
+	if p:
+		var comp: float = (float(profile["attrs"].get("composure", 10)) - 1.0) / 19.0
+		for k in Profiles.ATTRS:
+			if k != "composure":
+				swing[k] = g.rng.randfn((comp - 0.5) * 2.0, lerpf(4.0, 0.5, comp))
+	apply_profile(profile, swing)
 
 func update(d: float) -> void:
 	if h.dead:
@@ -45,9 +129,16 @@ func update(d: float) -> void:
 		_shop()
 	if h.busy() or h.stun > 0.0:
 		return
+	_check_pressure()
+	if _try_dodge():
+		return
 	if h.cmd == C_CAST and cast_lock > 0.0:
 		return
 	var brain = g.brain(h.team)
+	if brain != null and brain.engage_ok:
+		_eng_t += react
+	else:
+		_eng_t = 0.0
 	var foes: Array = g.foes_in(h.team, h.position, 1500.0)
 	var foe_heroes := []
 	for u in foes:
@@ -64,6 +155,8 @@ func update(d: float) -> void:
 	if _try_support(foe_heroes, brain):
 		return
 	target = _pick_target(foes, brain)
+	if _objective_leash(brain):
+		return
 	if target == null:
 		_roam(brain)
 		return
@@ -73,7 +166,91 @@ func update(d: float) -> void:
 
 # ------------------------------------------------------------ helpers
 func meta(s: String) -> Dictionary:
-	return h.kit.ai_meta(s)
+	var m: Dictionary = h.kit.ai_meta(s)
+	if stage_i >= 2:
+		return m
+	# 熟悉: no combo knowledge; 生疏: also only the skill's main use
+	var m2 := m.duplicate()
+	m2.erase("prefer_status")
+	m2.erase("setup_status")
+	if stage_i == 0 and _roll(["roles", s], 3.0) < 0.5:
+		# 生疏: about half the time only thinks of the skill's main use
+		var roles: Array = m.get("roles", [])
+		var keep := []
+		if not roles.is_empty():
+			keep.append(roles[0])
+		for r in ["ult", "heal", "team_heal"]:
+			if r in roles and not r in keep:
+				keep.append(r)
+		m2["roles"] = keep
+	return m2
+
+## awareness (objective play, round mode): once the core is open, don't chase far away from it;
+## walk back in when outside it. Returns true when it issued the order.
+func _objective_leash(brain) -> bool:
+	var obj: Dictionary = g.objective(h.team)
+	if obj.is_empty() or not bool(obj["open"]) or brain == null or brain.intent == "retreat":
+		return false
+	if _roll("objective") > obj_discipline:
+		return false
+	var core: Vector2 = obj["pos"]
+	var r: float = float(g.rounds.CORE_R)
+	if target != null and h.valid(target) and target.position.distance_to(core) > r + h.atk_range() + 60.0:
+		target = null
+	var dist_core: float = h.position.distance_to(core)
+	if dist_core > r * 0.85:
+		# nobody of ours on the point but they are (or we still need to capture): the closest one walks in
+		var mine := 0
+		var theirs := 0
+		var closest := true
+		for u in g.heroes:
+			if u.dead:
+				continue
+			if g.rounds.in_core(u):
+				if u.team == h.team: mine += 1
+				else: theirs += 1
+			elif u.team == h.team and u != h and u.position.distance_to(core) < dist_core:
+				closest = false
+		if mine == 0 and closest and (theirs > 0 or g.rounds.capture[h.team] < 1.0):
+			h.order_move(core + (h.position - core).normalized() * r * 0.35)
+			return true
+		if target == null or h.position.distance_to(target.position) > h.atk_range() + float(target.radius) + 20.0:
+			h.order_amove(brain.slot(h))
+			return true
+	return false
+
+## reaction: step out of telegraphed areas and the path of skillshots
+func _try_dodge() -> bool:
+	if dodge <= 0.0 or h.has_buff("root") or h.cast_t > 0.0:
+		return false
+	for th in g.threats_for(h.team):
+		var p: Vector2 = th["pos"]
+		var away := Vector2.ZERO
+		if th["kind"] == "area":
+			var dist: float = h.position.distance_to(p)
+			if dist > float(th["r"]) + h.radius or float(th["t"]) > 1.0:
+				continue
+			away = (h.position - p).normalized() * (float(th["r"]) - dist + h.radius + 50.0)
+		else:
+			var dir: Vector2 = th["dir"]
+			var rel: Vector2 = h.position - p
+			var along: float = rel.dot(dir)
+			if along < 0.0 or along > minf(float(th["left"]), float(th["speed"]) * 0.7):
+				continue
+			var side: float = rel.dot(dir.orthogonal())
+			if absf(side) > float(th["w"]) * 0.5 + h.radius + 10.0:
+				continue
+			away = dir.orthogonal() * (signf(side) if side != 0.0 else 1.0) * (float(th["w"]) * 0.5 + h.radius + 60.0)
+		if away == Vector2.ZERO:
+			continue
+		h.stat_add("dodge_seen")
+		if g.rng.randf() < dodge:
+			h.stat_add("dodge_try")
+			h.order_move(g.clamp_pos(h.position + away, h.radius))
+			cast_lock = 0.0
+			return true
+		return false
+	return false
 
 func _roles(s: String) -> Array:
 	return meta(s).get("roles", [])
@@ -151,12 +328,21 @@ func _update_retreat(hpf: float, foe_heroes: Array, brain) -> void:
 			near += 1
 	if retreating:
 		var team_ok: bool = brain == null or brain.intent != "retreat"
+		if g.rounds != null:
+			# round mode has no fountain and no respawn: a retreat is only a short disengage.
+			# Come back once nobody is close, or when the objective is about to be lost.
+			var obj: Dictionary = g.objective(h.team)
+			var urgent: bool = not obj.is_empty() and float(obj["urgency"]) >= 1.0
+			if (near == 0 or urgent) and team_ok:
+				retreating = false
+			return
 		if (hpf > 0.85 or (near == 0 and hpf > 0.55 and not g.near_home(h))) and team_ok:
 			retreating = false
 		return
 	var limit := 0.18 / greed
 	if h.role() == "tank":
 		limit = 0.15
+	limit *= maxf(0.2, 1.0 + _roll_n("retreat", decide_err, 3.0))
 	if near >= 2:
 		limit += 0.08
 	var killable: bool = target != null and h.valid(target) and bool(target.is_hero) and float(target.hp) < _burst_potential() * 0.6
@@ -169,6 +355,13 @@ func _update_retreat(hpf: float, foe_heroes: Array, brain) -> void:
 
 func _do_retreat(foe_heroes: Array) -> void:
 	var home: Vector2 = g.home_pos(h.team)
+	if g.rounds != null:
+		# disengage toward the team (or just away from the nearest foe), not all the way home
+		var brain = g.brain(h.team)
+		var pull: Vector2 = home
+		if brain != null:
+			pull = brain.front + (home - brain.front).normalized() * 260.0
+		home = pull
 	var away: Vector2 = (home - h.position).normalized()
 	var chaser = null
 	var cd := 1e9
@@ -303,8 +496,8 @@ func _pick_target(foes: Array, brain):
 			s += 100.0
 			s += (1.0 - float(u.hp) / float(u.max_hp)) * 100.0
 			s -= float(u.hp) * 0.015
-			if brain != null and u == brain.focus:
-				s += 90.0
+			if brain != null and u == brain.focus and _roll("focus") < follow:
+				s += 140.0
 			if u == peel_t:
 				s += 140.0
 			if u.disabled():
@@ -316,6 +509,8 @@ func _pick_target(foes: Array, brain):
 			s += 30.0
 		if g.in_enemy_fountain(u.position, h.team):
 			s -= 400.0
+		if aware_noise > 0.0:
+			s += _roll_n(u, aware_noise, 2.5)
 		if s > bs:
 			bs = s
 			best = u
@@ -330,7 +525,9 @@ func _try_skills(t, foes: Array, brain) -> bool:
 	var dist: float = h.position.distance_to(t.position)
 	var t_hero: bool = bool(t.is_hero)
 	var t_disabled: float = t.disable_left() if t_hero else 0.0
-	var committed: bool = brain == null or brain.engage_ok or h.role() == "tank" or dist < h.atk_range() + 60.0
+	var committed: bool = brain == null or (brain.engage_ok and _eng_t >= engage_delay) or h.role() == "tank" or dist < h.atk_range() + 60.0
+	if not committed and _roll("commit", 3.0) < decide_err * 0.25:
+		committed = true   # poor decision making: commits before the frontline is in
 	for s in ["r", "q", "w", "e"]:
 		var st: Dictionary = h.sdef[s]
 		var typ: String = st["type"]
@@ -374,8 +571,8 @@ func _try_skills(t, foes: Array, brain) -> bool:
 			elif foes.size() >= 4:
 				u = maxf(u, 30.0)
 		if "disable" in roles and in_reach and t_hero:
-			if t_disabled > 0.5:
-				u = maxf(u, 10.0)   # don't stack disables, chain them
+			if t_disabled > 0.5 and _roll("chain") < follow:
+				u = maxf(u, 10.0)   # don't stack disables, chain them (bad teamwork stacks them)
 			else:
 				u = maxf(u, 52.0 + (20.0 if h.role() == "tank" else 0.0))
 		if "gap_close" in roles and dist > h.atk_range() + 120.0 and in_reach and t_hero:
@@ -408,7 +605,7 @@ func _try_skills(t, foes: Array, brain) -> bool:
 			u -= 30.0
 		var pref: String = str(m.get("prefer_status", ""))
 		if pref != "":
-			u += 40.0 if _status(t, pref) > 0.0 else -18.0
+			u += (40.0 if _status(t, pref) > 0.0 else -18.0) * combo
 		var setup_st: String = str(m.get("setup_status", ""))
 		if setup_st != "" and _status(t, setup_st) <= 0.0:
 			u += 8.0
@@ -420,6 +617,9 @@ func _try_skills(t, foes: Array, brain) -> bool:
 			best_tgt = tgt
 			best_pos = pos
 	if best_s == "" or best_u < 45.0:
+		return false
+	# mechanics: a less skilled player hesitates / fumbles the timing (the cast comes a moment later)
+	if _roll("hesitate", 0.8) < (1.0 - mech01) * 0.6:
 		return false
 	if h.order_cast(best_s, best_tgt, best_pos) == "":
 		cast_lock = 0.8
@@ -438,9 +638,10 @@ func _attack(t, foe_heroes: Array, brain) -> void:
 				h.order_move(h.position + away * 150.0)
 				return
 	# backline waits for the frontline before walking into the fight
-	if brain != null and h.role() != "tank" and bool(t.is_hero):
+	var lone_wolf: bool = _roll("lone", 3.0) < lone
+	if brain != null and bool(t.is_hero) and not lone_wolf and (h.role() != "tank" or brain.intent == "setup"):
 		var in_range: bool = dist <= h.atk_range() + float(t.radius) + 40.0
-		if not in_range and (not brain.engage_ok or brain.intent == "group" or brain.intent == "hold"):
+		if not in_range and (not brain.engage_ok or brain.intent == "group" or brain.intent == "hold" or brain.intent == "setup"):
 			var slot: Vector2 = brain.slot(h)
 			if h.position.distance_to(slot) > 60.0:
 				h.order_move(slot)
@@ -452,6 +653,12 @@ func _roam(brain) -> void:
 	if rp != null and (brain == null or brain.intent != "retreat"):
 		h.order_move(rp)
 		return
+	if brain != null and _roll("lone", 3.0) < lone:
+		# poor teamwork: wanders toward the enemy instead of holding the formation
+		var e2 = g.nearest_foe_hero(h.team, h.position)
+		if e2 != null:
+			h.order_amove(e2.position)
+			return
 	if brain != null:
 		var slot: Vector2 = brain.slot(h)
 		if brain.intent == "fight" or brain.intent == "group":

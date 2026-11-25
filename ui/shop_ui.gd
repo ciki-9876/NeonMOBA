@@ -50,6 +50,9 @@ func _buy(id: String) -> void:
 func _sell(i: int) -> void:
 	if gm.state != C.S.PLAY or gm.player == null or i >= gm.player.inv.size(): return
 	var id: String = gm.player.inv[i]
+	if gm.rounds != null and gm.rounds.shop_block_reason() != "":
+		hd.toast(gm.rounds.shop_block_reason(), Color(1.0, 0.5, 0.4), 2.0)
+		return
 	var v := gm.sell_for(gm.player, i)
 	vw.sfx("select", 0.8, -6.0)
 	hd.toast("出售 %s（+%d 金）" % [ItemsDB.DB[id]["name"], int(v)], Color(1.0, 0.85, 0.3), 2.5)
@@ -310,7 +313,8 @@ func _refresh_inv() -> void:
 		if i < gm.player.inv.size():
 			var id: String = gm.player.inv[i]
 			b.icon = gm.TEX["it_" + id]
-			b.tooltip_text = _strip_bb(_item_text(id, false)) + "\n右键出售（返还 %d 金）" % int(float(ItemsDB.DB[id]["cost"]) * 0.5)
+			var refund: bool = gm.rounds != null and gm.player.refund_tokens > 0
+			b.tooltip_text = _strip_bb(_item_text(id, false)) + "\n右键出售（返还 %d 金%s）" % [int(float(ItemsDB.DB[id]["cost"]) * (1.0 if refund else 0.5)), "，本回合原价" if refund else ""]
 		else:
 			b.icon = null
 			b.tooltip_text = "空栏位"

@@ -346,7 +346,7 @@ func _hud_match_ended(win: bool) -> void:
 		_flash(Color(1, 1, 1, 0.6))
 	else:
 		center_lbl.label_settings.font_color = Color(1.0, 0.35, 0.6)
-		center_lbl.text = "DEFEAT" if gm.mode == C.M.ARENA else "SIGNAL LOST"
+		center_lbl.text = "SIGNAL LOST" if gm.mode == C.M.SURVIVAL else "DEFEAT"
 	if gm.mode == C.M.SURVIVAL:
 		var new_best := gm.t > best
 		if new_best:
@@ -354,6 +354,9 @@ func _hud_match_ended(win: bool) -> void:
 			_save_best()
 		sub_lbl.text = "%s存活 %s     等级 %d     消灭 %d\n\n最长存活 %s\n\n[ R 再来一局    Esc 返回菜单 ]" % [
 			("你在霓虹尸潮中坚持了 30 分钟！\n\n" if win else ("★ 新纪录 ★\n" if new_best else "")), _fmt(gm.t), gm.player.level, gm.kills, _fmt(best)]
+	elif gm.mode == C.M.ROUNDS:
+		sub_lbl.text = "回合  霓虹队  %d  :  %d  赤潮队     用时 %s\n\n你：%s   %d / %d / %d\n\n[ R 再来一局    Esc 返回菜单 ]" % [
+			gm.rounds.score[0], gm.rounds.score[1], _fmt(gm.t), gm.player.display_name(), gm.player.kills, gm.player.deaths, gm.player.assists]
 	else:
 		sub_lbl.text = "霓虹队  %d  :  %d  赤潮队     用时 %s\n\n你：%s  等级 %d   %d / %d / %d\n\n[ R 再来一局    Esc 返回菜单 ]" % [
 			gm.team_kills[0], gm.team_kills[1], _fmt(gm.t), gm.player.display_name(), gm.player.level, gm.player.kills, gm.player.deaths, gm.player.assists]
@@ -422,6 +425,8 @@ func _update_fx_ui(delta: float) -> void:
 			var bz = gm.bosses[0]
 			if is_instance_valid(bz) and not bz.dead:
 				event_lbl.text = "%s   %d / %d   (%d%%)" % [gm._ename(bz), int(bz.hp), int(bz.max_hp), int(100.0 * bz.hp / bz.max_hp)]
+	elif gm.mode == C.M.ROUNDS:
+		_update_rounds_hud(p)
 	else:
 		score_rt.text = "[center][color=#5fe8ff]霓虹  %d[/color]   [color=#8a92b8]%s[/color]   [color=#ff6a6a]%d  赤潮[/color][/center]" % [gm.team_kills[0], _fmt(gm.t), gm.team_kills[1]]
 		var b0 = gm.brain(0)
@@ -510,6 +515,8 @@ func _update_fx_ui(delta: float) -> void:
 
 func _update_board() -> void:
 	var txt := "[center][b][color=#ffd23f]计分板[/color][/b]   [color=#8a92b8]%s · 先拿到 %d 次击倒获胜[/color][/center]\n" % [_fmt(gm.t), C.ARENA_KILLS]
+	if gm.rounds != null:
+		txt = "[center][b][color=#ffd23f]计分板[/color][/b]   [color=#8a92b8]第 %d 回合 · 回合比分 %d : %d · 先赢 %d 回合获胜[/color][/center]\n" % [gm.rounds.round_n, gm.rounds.score[0], gm.rounds.score[1], gm.rounds.ROUNDS_TO_WIN]
 	for tm in 2:
 		var hc := "#5fe8ff" if tm == 0 else "#ff6a6a"
 		txt += "\n[color=%s][b]%s  %d[/b][/color]\n" % [hc, ("霓虹队" if tm == 0 else "赤潮队"), gm.team_kills[tm]]
@@ -542,8 +549,56 @@ func _hud_match_started() -> void:
 	shp._close_shop()
 	_setup_hud()
 	shp._refresh_inv()
-	var arena := gm.mode == C.M.ARENA
+	var arena := gm.mode != C.M.SURVIVAL
 	minimap.visible = arena
 	score_rt.visible = arena
 	time_lbl.visible = not arena
 	kills_lbl.visible = not arena
+
+# ============================================================ round mode
+func _update_rounds_hud(p) -> void:
+	var r = gm.rounds
+	score_rt.text = "[center][color=#5fe8ff]霓虹  %d[/color]   [color=#8a92b8]第 %d 回合 · %s[/color]   [color=#ff6a6a]%d  赤潮[/color][/center]" % [
+		r.score[0], r.round_n, _fmt(maxf(0.0, r.time_left())), r.score[1]]
+	var txt := ""
+	match r.phase:
+		"buy":
+			txt = "购买阶段 · %d 秒后开战（B 打开商店）" % int(ceil(r.time_left()))
+			if p.refund_tokens > 0:
+				txt += " · 本回合可原价卖出一件装备"
+		"live":
+			if not r.core_open():
+				txt = "核心 %d 秒后开放" % int(ceil(r.CORE_UNLOCK - r.phase_t))
+			else:
+				txt = "核心开放 · 占领  霓虹 %d%%  /  赤潮 %d%%" % [int(r.capture[0] * 100.0), int(r.capture[1] * 100.0)]
+				if r.phase_t >= r.OVERTIME_AT:
+					txt += " · 决战：占领速度 ×2"
+		"post":
+			txt = "回合结束 · 下一回合即将开始"
+	var b0 = gm.brain(0)
+	if b0 != null and r.phase == "live":
+		txt += "   ·   队伍指令：" + str({"group": "集结推进", "fight": "开团！", "hold": "等待", "retreat": "撤退", "setup": "卡位等待核心开放"}.get(b0.intent, ""))
+	event_lbl.text = txt
+	respawn_lbl.text = "阵亡 · 等待下一回合" if (p.dead and gm.state == C.S.PLAY and r.phase == "live") else ""
+	if board.visible and Engine.get_process_frames() % 15 == 0:
+		_update_board()
+
+func _hud_round_started(n: int) -> void:
+	_announce("第 %d 回合" % n, Color(0.6, 1.4, 2.0), 1.2)
+	shp._refresh_inv()
+
+func _hud_round_live(_n: int) -> void:
+	_announce("开战！", Color(1.0, 0.85, 0.35), 0.9)
+	if shp.shop_open:
+		shp._close_shop()
+
+func _hud_round_ended(_n: int, w: int, reason: String) -> void:
+	var r = gm.rounds
+	var col := Color(0.4, 1.6, 2.0) if w == 0 else (Color(2.0, 0.5, 0.5) if w == 1 else Color(1.4, 1.4, 1.4))
+	var who := "霓虹队" if w == 0 else ("赤潮队" if w == 1 else "双方")
+	_announce("%s 赢下本回合（%s）" % [who, reason] if w >= 0 else "平局（%s）" % reason, col, 2.0)
+	if gm.player != null:
+		var streak: int = r.loss_streak[gm.player.team]
+		var pay: float = r.WIN_PAY if w == gm.player.team else float(r.LOSS_PAY[clampi(streak - 1, 0, r.LOSS_PAY.size() - 1)])
+		toast("回合收入 +%d 金%s" % [int(pay), "（连败 %d，补偿递增；下回合可原价卖出一件装备）" % streak if w != gm.player.team else ""], Color(1.0, 0.85, 0.3), 4.0)
+

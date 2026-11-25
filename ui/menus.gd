@@ -3,6 +3,7 @@ extends Node
 ## (split out of the old monolithic main.gd — see docs/架构说明.md)
 
 const C = preload("res://game/consts.gd")
+const Rounds = preload("res://game/rounds.gd")
 const Unit = preload("res://unit.gd")
 const Hero = preload("res://hero.gd")
 const HeroAI = preload("res://hero_ai.gd")
@@ -29,6 +30,8 @@ var inp: PlayerInputT
 ## main.gd (composition root)
 var app: Node = null
 
+## rules line under the 3V3 setup (text depends on arena / rounds)
+var arena_rule: Label
 var sel_mode := C.M.SURVIVAL
 var menu_root: Control
 var menu_main: VBoxContainer
@@ -59,7 +62,7 @@ func _build_menu() -> void:
 	# main
 	menu_main = VBoxContainer.new()
 	menu_main.add_theme_constant_override("separation", 14)
-	hd._place(menu_main, Control.PRESET_CENTER, -200, 10, 400, 260)
+	hd._place(menu_main, Control.PRESET_CENTER, -200, -20, 400, 340)
 	menu_root.add_child(menu_main)
 	var b1 := _menu_btn("生存模式  ·  30 分钟   [1]", 400, 64, 24)
 	b1.pressed.connect(_open_select.bind(C.M.SURVIVAL))
@@ -67,6 +70,9 @@ func _build_menu() -> void:
 	var b2 := _menu_btn("3V3 英雄竞技场   [2]", 400, 64, 24)
 	b2.pressed.connect(_open_select.bind(C.M.ARENA))
 	menu_main.add_child(b2)
+	var b3 := _menu_btn("回合制 3V3 · 新规则原型   [3]", 400, 64, 24)
+	b3.pressed.connect(_open_select.bind(C.M.ROUNDS))
+	menu_main.add_child(b3)
 	var hint := hd._label(15, Color(0.75, 0.75, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
 	hint.text = "右键 移动/攻击   A 攻击指令   QWER 技能   Ctrl+QWER 学习\nB 商店（打开时暂停）   C 属性   Tab 计分板   Esc 暂停"
 	menu_main.add_child(hint)
@@ -154,6 +160,7 @@ func _build_menu() -> void:
 	back2.pressed.connect(_show_menu)
 	bottom.add_child(back2)
 	var rule := hd._label(15, Color(0.75, 0.75, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
+	arena_rule = rule
 	rule.text = "坦克 · 输出 · 辅助 三职业 3V3 · 先拿到 %d 次击倒的队伍获胜（%d 分钟后击倒多者获胜）· 阵亡后在泉水复活 · 可选相同英雄" % [C.ARENA_KILLS, int(C.ARENA_LEN / 60.0)]
 	hd._place(rule, Control.PRESET_CENTER_BOTTOM, -500, -90, 1000, 30)
 	menu_arena.add_child(rule)
@@ -227,9 +234,13 @@ func _open_select(m: int) -> void:
 	sel_mode = m
 	menu_main.visible = false
 	menu_surv.visible = m == C.M.SURVIVAL
-	menu_arena.visible = m == C.M.ARENA
+	menu_arena.visible = m == C.M.ARENA or m == C.M.ROUNDS
 	hd.center_lbl.label_settings.font_size = 56
-	hd.center_lbl.text = "选择英雄" if m == C.M.SURVIVAL else "3V3 英雄竞技场"
+	hd.center_lbl.text = {C.M.SURVIVAL: "选择英雄", C.M.ARENA: "3V3 英雄竞技场", C.M.ROUNDS: "回合制 3V3"}[m]
+	if m == C.M.ROUNDS:
+		arena_rule.text = "先赢 %d 个回合获胜 · 每回合开局购买装备 · 中央核心开放后占满或全歼对手赢下回合 · 回合内不复活、没有升级" % Rounds.ROUNDS_TO_WIN
+	elif m == C.M.ARENA:
+		arena_rule.text = "坦克 · 输出 · 辅助 三职业 3V3 · 先拿到 %d 次击倒的队伍获胜（%d 分钟后击倒多者获胜）· 阵亡后在泉水复活 · 可选相同英雄" % [C.ARENA_KILLS, int(C.ARENA_LEN / 60.0)]
 	hd.sub_lbl.text = ""
 	vw.sfx("select", 1.2, -6.0)
 
@@ -245,4 +256,7 @@ func _start_arena_from_menu() -> void:
 		lst.append(id)
 	gm._fill_random(a)
 	gm._fill_random(b)
-	gm._start_arena(a, b, diff_opt.selected)
+	if sel_mode == C.M.ROUNDS:
+		gm._start_rounds(a, b, diff_opt.selected)
+	else:
+		gm._start_arena(a, b, diff_opt.selected)

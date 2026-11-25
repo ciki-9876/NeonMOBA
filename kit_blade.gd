@@ -22,6 +22,10 @@ func reset() -> void:
 	r_target = null
 	q_follow = null
 
+func round_reset() -> void:
+	reset()
+	slashes.clear()
+
 func busy() -> bool:
 	return r_left > 0
 

@@ -14,6 +14,15 @@ func setup(hero, game) -> void:
 func reset() -> void:
 	pass
 
+## new round in round mode: also drop lingering zones / projectiles
+func round_reset() -> void:
+	reset()
+
+## telegraphed danger this kit has on the ground / in flight, for the AI to dodge:
+##   [{"kind": "area", "pos", "r", "t" (seconds until it lands)}, {"kind": "shot", "pos", "dir", "w", "speed", "left"}]
+func threats() -> Array:
+	return []
+
 ## add kit-provided stats during hero recalc (e.g. passive attack speed)
 func stat_mods(_n: Dictionary) -> void:
 	pass

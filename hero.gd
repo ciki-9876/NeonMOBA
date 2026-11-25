@@ -67,6 +67,14 @@ var dmg_log := {}
 var hurt_cd := 0.0
 var heal_done := 0.0
 var last_hurt := -99.0
+## round mode: a losing team may sell one item at full price during the next buy phase
+var refund_tokens := 0
+## the player (选手) controlling this hero (game/profiles.gd); {} = none
+var profile := {}
+## stat bonuses from runes / signature abilities (same keys as item stats)
+var mods_stats := {}
+## measurement for the batch simulator (sim/sim_cli.gd): damage, skillshots, telegraph hits, ...
+var stats := {}
 var _prev_pos := Vector2.ZERO
 
 # ============================================================ setup
@@ -248,6 +256,11 @@ func recalc() -> void:
 	var eva_keep := 1.0
 	var cdr_keep := 1.0
 	var spx := {"crit": [0.0, 1.0], "chain": [], "deso": 0.0, "skadi": [], "mkb": [], "radiance": [], "ac_aura": 0.0, "shiva": 0.0, "scepter": false, "heart": 0.0}
+	for k in mods_stats:
+		if k == "cdr":
+			cdr_keep *= 1.0 - float(mods_stats[k]) / 100.0
+		elif b.has(k):
+			b[k] += float(mods_stats[k])
 	for id in inv:
 		var it: Dictionary = ItemsDB.DB[id]
 		var stv: Dictionary = it["stats"]
@@ -407,6 +420,11 @@ func order_attack(u) -> void:
 	if busy() or not is_foe(u): return
 	if cmd == C.ATTACK and cmd_target == u:
 		return
+	if atk_phase == 1 and atk_target == u:
+		# already winding up an attack on this unit (e.g. from attack-move): keep it
+		cmd = C.ATTACK
+		cmd_target = u
+		return
 	_cancel()
 	cmd = C.ATTACK
 	cmd_target = u
@@ -414,6 +432,11 @@ func order_attack(u) -> void:
 func order_amove(p: Vector2) -> void:
 	if busy(): return
 	if cmd == C.AMOVE:
+		cmd_pos = p
+		return
+	if atk_phase == 1:
+		# attack-move keeps the attack that is winding up (it would re-acquire a target anyway)
+		cmd = C.AMOVE
 		cmd_pos = p
 		return
 	_cancel()
@@ -739,3 +762,52 @@ func _visuals(d: float) -> void:
 	trail.add_point(position - fdir * 14.0)
 	while trail.get_point_count() > 14:
 		trail.remove_point(0)
+
+# ============================================================ runes & signature abilities
+## apply rune / signature mods (format: game/runes_db.gd). Call once, right after setup().
+func apply_mods(mods: Array) -> void:
+	if mods.is_empty():
+		return
+	sdef = sdef.duplicate(true)   # never patch the shared HeroesDB definition
+	for m in mods:
+		match str(m["type"]):
+			"stat":
+				mods_stats[m["key"]] = float(mods_stats.get(m["key"], 0.0)) + float(m["v"])
+			"skill":
+				var st: Dictionary = sdef[m["skill"]]
+				if m.has("op"):
+					_patch_effects(st.get("effects", []), str(m["op"]), str(m["key"]), m)
+				elif st.has(m["key"]):
+					st[m["key"]] = _patch_value(st[m["key"]], m)
+			"append":
+				var st2: Dictionary = sdef[m["skill"]]
+				if st2.has("effects"):
+					st2["effects"].append((m["effect"] as Dictionary).duplicate(true))
+	if "_meta_cache" in kit:
+		kit._meta_cache = {}
+	recalc()
+
+func _patch_effects(effects: Array, op: String, key: String, m: Dictionary) -> void:
+	for e in effects:
+		if str(e.get("do", "")) == op and e.has(key):
+			e[key] = _patch_value(e[key], m)
+		for sub in ["then", "each"]:
+			if e.has(sub):
+				_patch_effects(e[sub], op, key, m)
+
+func _patch_value(v, m: Dictionary):
+	if v is Array:
+		var out := []
+		for x in v:
+			out.append(_patch_value(x, m))
+		return out
+	var f := float(v)
+	if m.has("mul"):
+		f *= float(m["mul"])
+	if m.has("add"):
+		f += float(m["add"])
+	return f
+
+func stat_add(key: String, v := 1.0) -> void:
+	stats[key] = float(stats.get(key, 0.0)) + v
+
