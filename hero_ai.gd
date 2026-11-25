@@ -6,7 +6,6 @@ extends RefCounted
 ##    formation slot by role (tank front, carry behind, support at the back)
 ## The same AI plays any hero, as an ally or as an enemy.
 
-const C_CAST := 5
 const Profiles = preload("res://game/profiles.gd")
 const ItemsDB = preload("res://items_db.gd")
 
@@ -120,6 +119,7 @@ func update(d: float) -> void:
 		return
 	cast_lock -= d
 	think -= d
+	_drive(d)
 	if think > 0.0:
 		return
 	think = react * g.rng.randf_range(0.8, 1.25)
@@ -133,7 +133,7 @@ func update(d: float) -> void:
 	_check_pressure()
 	if _try_dodge():
 		return
-	if h.cmd == C_CAST and cast_lock > 0.0:
+	if (h.casting() or h.charging != "") and cast_lock > 0.0:
 		return
 	var brain = g.brain(h.team)
 	if brain != null and brain.engage_ok:
@@ -216,10 +216,10 @@ func _objective_leash(brain) -> bool:
 			elif u.team == h.team and u != h and u.position.distance_to(core) < dist_core:
 				closest = false
 		if mine == 0 and closest and (theirs > 0 or g.rounds.capture[h.team] < 1.0):
-			h.order_move(core + (h.position - core).normalized() * r * 0.35)
+			_move(core + (h.position - core).normalized() * r * 0.35)
 			return true
 		if target == null or h.position.distance_to(target.position) > h.atk_range() + float(target.radius) + 20.0:
-			h.order_amove(brain.slot(h))
+			_amove(brain.slot(h))
 			return true
 	return false
 
@@ -228,7 +228,7 @@ func _aware01() -> float:
 
 ## reaction: step out of telegraphed areas and the path of skillshots
 func _try_dodge() -> bool:
-	if dodge <= 0.0 or h.has_buff("root") or h.cast_t > 0.0:
+	if dodge <= 0.0 or h.has_buff("root") or h.casting():
 		return false
 	for th in g.threats_for(h.team):
 		var p: Vector2 = th["pos"]
@@ -250,10 +250,11 @@ func _try_dodge() -> bool:
 			away = dir.orthogonal() * (signf(side) if side != 0.0 else 1.0) * (float(th["w"]) * 0.5 + h.radius + 60.0)
 		if away == Vector2.ZERO:
 			continue
-		h.stat_add("dodge_seen")
+		var is_bolt: bool = bool(th.get("bolt", false))
+		h.stat_add("bolt_seen" if is_bolt else "dodge_seen")
 		if g.rng.randf() < dodge:
-			h.stat_add("dodge_try")
-			h.order_move(g.clamp_pos(h.position + away, h.radius))
+			h.stat_add("bolt_dodge" if is_bolt else "dodge_try")
+			_move(g.clamp_pos(h.position + away, h.radius))
 			cast_lock = 0.0
 			return true
 		return false
@@ -382,17 +383,17 @@ func _do_retreat(foe_heroes: Array) -> void:
 			var typ: String = h.sdef[s]["type"]
 			var roles := _roles(s)
 			if "escape" in roles and typ in ["point", "unit_or_point"] and _ready_skill(s, null):
-				if h.order_cast(s, null, h.position + away * _reach(s)) == "":
+				if _cast(s, null, h.position + away * _reach(s)) == "":
 					cast_lock = 0.6
 					return
 			# self-save: shield / banish / heal on myself
 			if typ == "ally" and ("save" in roles or "heal" in roles) and _ready_skill(s, h):
-				if h.order_cast(s, h, h.position) == "":
+				if _cast(s, h, h.position) == "":
 					cast_lock = 0.5
 					return
 			# peel the chaser with a disable
 			if "disable" in roles and typ in ["unit", "point"] and _ready_skill(s, chaser) and cd < _reach(s) + 40.0:
-				if h.order_cast(s, chaser if typ == "unit" else null, chaser.position) == "":
+				if _cast(s, chaser if typ == "unit" else null, chaser.position) == "":
 					cast_lock = 0.5
 					return
 	# terrain: break line of sight behind a pillar / wall instead of running in the open
@@ -407,9 +408,9 @@ func _do_retreat(foe_heroes: Array) -> void:
 				_cover_end = g.t + 1.8
 			if h.position.distance_to(cp) > 20.0:
 				h.stat_add("cover_t", react)
-			h.order_move(cp)
+			_move(cp)
 			return
-	h.order_move(home)
+	_move(home)
 
 # ------------------------------------------------------------ team support (heal / save / buff allies)
 func _try_support(foe_heroes: Array, brain) -> bool:
@@ -474,7 +475,8 @@ func _try_support(foe_heroes: Array, brain) -> bool:
 				if is_ult and hpf >= save_hp:
 					u = 0.0
 			if "buff_ally" in roles and not ("save" in roles):
-				var engaged: bool = a.cmd_target != null and h.valid(a.cmd_target) and a.position.distance_to(a.cmd_target.position) < a.atk_range() + 150.0
+				var at = a.ai.target if a.ai != null else null
+				var engaged: bool = at != null and h.valid(at) and a.position.distance_to(at.position) < a.atk_range() + 150.0
 				if engaged:
 					u = maxf(u, 46.0 + (15.0 if a.role() == "carry" else 0.0))
 			if a == h:
@@ -486,7 +488,7 @@ func _try_support(foe_heroes: Array, brain) -> bool:
 	if best_s == "" or best_u < 45.0:
 		return false
 	var p: Vector2 = best_t.position if best_t != null else h.position
-	if h.order_cast(best_s, best_t, p) == "":
+	if _cast(best_s, best_t, p) == "":
 		cast_lock = 0.7
 		last_cast = best_s
 		return true
@@ -647,7 +649,7 @@ func _try_skills(t, foes: Array, brain) -> bool:
 	# mechanics: a less skilled player hesitates / fumbles the timing (the cast comes a moment later)
 	if _roll("hesitate", 0.8) < (1.0 - mech01) * 0.6:
 		return false
-	if h.order_cast(best_s, best_tgt, best_pos) == "":
+	if _cast(best_s, best_tgt, best_pos) == "":
 		cast_lock = 0.8
 		last_cast = best_s
 		return true
@@ -661,7 +663,7 @@ func _attack(t, foe_heroes: Array, brain) -> void:
 		for u in foe_heroes:
 			if bool(u.def["melee"]) and h.position.distance_to(u.position) < 240.0:
 				var away: Vector2 = (h.position - u.position).normalized()
-				h.order_move(h.position + away * 150.0)
+				_move(h.position + away * 150.0)
 				return
 	# backline waits for the frontline before walking into the fight
 	var lone_wolf: bool = _roll("lone", 3.0) < lone
@@ -670,38 +672,38 @@ func _attack(t, foe_heroes: Array, brain) -> void:
 		if not in_range and (not brain.engage_ok or brain.intent == "group" or brain.intent == "hold" or brain.intent == "setup"):
 			var slot: Vector2 = brain.slot(h)
 			if h.position.distance_to(slot) > 60.0:
-				h.order_move(slot)
+				_move(slot)
 			return
-	h.order_attack(t)
+	_engage(t)
 
 func _roam(brain) -> void:
 	var rp = g.nearest_rune(h.position, 700.0)
 	if rp != null and (brain == null or brain.intent != "retreat"):
-		h.order_move(rp)
+		_move(rp)
 		return
 	if brain != null and _roll("lone", 3.0) < lone:
 		# poor teamwork: wanders toward the enemy instead of holding the formation
 		var e2 = g.nearest_foe_hero(h.team, h.position)
 		if e2 != null:
-			h.order_amove(e2.position)
+			_amove(e2.position)
 			return
 	if brain != null and brain.check_pos != Vector2.INF and brain.intent != "retreat" \
 			and (h.role() == "tank" or (h.role() != "support" and _roll("check", 3.0) < 0.3)) and _roll("check_aw", 3.0) < _aware01() + 0.2:
 		h.stat_add("brush_check", react)
-		h.order_amove(brain.check_pos)
+		_amove(brain.check_pos)
 		return
 	if brain != null:
 		var slot: Vector2 = brain.slot(h)
 		if brain.intent == "fight" or brain.intent == "group":
-			h.order_amove(slot)
+			_amove(slot)
 		else:
-			h.order_move(slot)
+			_move(slot)
 		return
 	var tgt = g.nearest_foe_hero(h.team, h.position)
 	if tgt == null:
-		h.order_amove(g.arena_center())
+		_amove(g.arena_center())
 	else:
-		h.order_amove(tgt.position)
+		_amove(tgt.position)
 
 # ------------------------------------------------------------ growth
 func _learn() -> void:
@@ -817,3 +819,160 @@ func _shop_rounds() -> void:
 			h.stat_add("counter_buy")
 		return
 
+# ============================================================ 3C driver
+## The decision code above sets an intent (_move / _amove / _engage / _cast). Every step, _drive() turns it into
+## the hero's controller input exactly like a player would: a move direction, an aim point, fire, held keys.
+##   mechanics -> aim error of every basic attack (sampled per shot) and how well it strafes
+##   reaction  -> how quickly the aim follows the target (aim lag) and dodging (bolts included, see _try_dodge)
+var mode := "idle"          # idle | move | amove | attack
+var goal := Vector2.ZERO
+var goal_unit = null
+var _cast_aim := Vector2.ZERO
+var _cast_unit = null
+var _charge_goal := 1.0
+var _charge_unit = null
+var _aim_pt := Vector2.ZERO
+var _aim_off := Vector2.ZERO
+var _last_phase := 0
+var _strafe := 1.0
+var _strafe_t := 0.0
+
+func _move(p: Vector2) -> void:
+	mode = "move"
+	goal = p
+	goal_unit = null
+
+func _amove(p: Vector2) -> void:
+	mode = "amove"
+	goal = p
+	goal_unit = null
+
+func _engage(u) -> void:
+	mode = "attack"
+	goal_unit = u
+
+## cast toward a unit or a point; charge skills are held until the wanted charge is reached
+func _cast(s: String, tgt, pos: Vector2) -> String:
+	var unit_ok: bool = tgt != null and is_instance_valid(tgt) and not tgt.dead
+	h.ctl_aim = tgt.position if unit_ok else pos
+	_aim_pt = h.ctl_aim
+	var err: String = h.press(s)
+	if err != "":
+		return err
+	_cast_unit = tgt if unit_ok else null
+	_cast_aim = pos
+	if h.charging == s:
+		_charge_unit = tgt if unit_ok and tgt != h else null
+		# good mechanics: waits for a fuller charge (but not when the target is about to walk out of reach)
+		_charge_goal = clampf(0.55 + 0.45 * mech01 + g.rng.randf_range(-0.15, 0.1), 0.3, 1.0)
+		h.ctl_hold = true
+	return ""
+
+func _steer(p: Vector2) -> void:
+	if h.position.distance_to(p) < 10.0:
+		h.ctl_move = Vector2.ZERO
+		return
+	h.ctl_move = (h.steer_point(p) - h.position).normalized()
+
+## where to shoot at u: lead by the projectile flight time (velocity estimate is the target's current one)
+func _lead(u, speed: float) -> Vector2:
+	var p: Vector2 = u.position
+	if speed <= 0.0 or not ("vel" in u):
+		return p
+	var tt: float = h.position.distance_to(p) / speed
+	return p + (u.vel as Vector2) * tt
+
+func _aim_at(p: Vector2, d: float) -> void:
+	# reaction: the aim catches up with a time constant ~ half the think interval
+	var tau: float = maxf(0.03, react * 0.5)
+	_aim_pt = _aim_pt.lerp(p, 1.0 - exp(-d / tau))
+	h.ctl_aim = _aim_pt + _aim_off
+
+func _drive(d: float) -> void:
+	h.ctl_move = Vector2.ZERO
+	h.ctl_fire = false
+	# a new swing / shot starts: sample this shot's aim error
+	if h.atk_phase == 1 and _last_phase != 1:
+		_aim_off = Vector2.from_angle(g.rng.randf() * TAU) * sqrt(g.rng.randf()) * aim_err * 0.6
+	_last_phase = h.atk_phase
+	if h.casting():
+		_aim_at(_cast_unit.position if _cast_unit != null and is_instance_valid(_cast_unit) else _cast_aim, d)
+		return
+	if h.charging != "":
+		var cu = _charge_unit
+		var cp: Vector2 = _cast_aim
+		if cu != null and is_instance_valid(cu) and not cu.dead:
+			var sh_speed := 1500.0
+			cp = _lead(cu, sh_speed)
+		_aim_at(cp, d)
+		var reach: float = _reach(h.charging)
+		var leaving: bool = cu != null and is_instance_valid(cu) and h.position.distance_to(cu.position) > reach * 0.9
+		h.ctl_hold = h.charge < _charge_goal and not leaving
+		if mode == "attack":
+			_kite(goal_unit, d)
+		return
+	h.ctl_hold = false
+	match mode:
+		"move":
+			_steer(goal)
+			_aim_at(goal, d)
+		"amove":
+			var f = g.nearest_foe(h.team, h.position, h.atk_range() + 160.0)
+			if f != null:
+				_shoot(f, d)
+				_kite(f, d)
+			else:
+				_steer(goal)
+				_aim_at(goal, d)
+		"attack":
+			var u = goal_unit
+			if u == null or not h.is_foe(u):
+				mode = "idle"
+				return
+			_shoot(u, d)
+			_kite(u, d)
+		_:
+			var f2 = g.nearest_foe(h.team, h.position, h.atk_range() + 60.0)
+			if f2 != null:
+				_shoot(f2, d)
+
+## aim and fire at u when it is worth a shot
+func _shoot(u, d: float) -> void:
+	var melee: bool = bool(h.def["melee"])
+	var dist: float = h.position.distance_to(u.position)
+	if melee:
+		_aim_at(u.position, d)
+		h.ctl_fire = dist <= h.melee_reach() + float(u.radius) - 4.0
+	else:
+		_aim_at(_lead(u, h.proj_speed()), d)
+		h.ctl_fire = dist <= h.bolt_reach() * 0.85 and g.has_los(h.position, u.position)
+
+## footwork around a target: melee closes in; ranged holds ~85% of its range and strafes (mechanics)
+func _kite(u, d: float) -> void:
+	if u == null or not is_instance_valid(u) or u.dead:
+		return
+	var to: Vector2 = u.position - h.position
+	var dist := to.length()
+	if bool(h.def["melee"]):
+		if dist > h.melee_reach() * 0.7 + float(u.radius):
+			_steer(u.position)
+		return
+	var want: float = h.atk_range() * 0.85
+	if dist > h.atk_range() or not g.has_los(h.position, u.position):
+		_steer(u.position)
+		return
+	_strafe_t -= d
+	if _strafe_t <= 0.0:
+		_strafe_t = g.rng.randf_range(0.35, 0.9)
+		_strafe = -_strafe if g.rng.randf() < 0.7 else _strafe
+	var dirn := to / maxf(dist, 1.0)
+	var mv: Vector2 = dirn.orthogonal() * _strafe * (0.25 + 0.75 * mech01)
+	if dist < want * 0.6:
+		mv -= dirn
+	elif dist > want * 1.1:
+		mv += dirn * 0.6
+	h.ctl_move = mv.limit_length(1.0)
+	# don't strafe into a wall
+	if g.terrain != null and g.terrain.blocked(h.position + h.ctl_move * 40.0, h.radius):
+		_strafe = -_strafe
+		h.ctl_move = (dirn.orthogonal() * _strafe).limit_length(1.0)

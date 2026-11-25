@@ -1,5 +1,7 @@
 extends Node2D
-## Mouse / keyboard control of the player hero and debug keys.
+## Player control (3C): WASD move, mouse aim, left button = basic attack (hold to keep firing),
+## right button = the hero's signature skill (hold to charge when it charges), Q / E / R = skills toward the cursor.
+## Writes the hero's virtual controller (hero.gd ctl_*) every frame; the AI writes the same controller.
 ## (split out of the old monolithic main.gd — see docs/架构说明.md)
 
 const C = preload("res://game/consts.gd")
@@ -42,10 +44,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 	if ev is InputEventKey and ev.pressed and not ev.echo:
 		var k: int = ev.physical_keycode
 		if gm.state == C.S.MENU:
-			if k == KEY_1: mnu._open_select(C.M.SURVIVAL)
-			elif k == KEY_2: mnu._open_select(C.M.ARENA)
-			elif k == KEY_3: mnu._open_select(C.M.ROUNDS)
-			elif k == KEY_4: mnu.open_exp3c()
+			if k == KEY_1: mnu._open_select(C.M.ROUNDS)
+			elif k == KEY_2: mnu.open_exp3c()
 			return
 		if gm.state == C.S.SELECT:
 			if k == KEY_ESCAPE: mnu._show_menu()
@@ -89,21 +89,13 @@ func _unhandled_input(ev: InputEvent) -> void:
 			return
 		if shp.shop_open:
 			return
-		var key_map := {KEY_Q: "q", KEY_W: "w", KEY_E: "e", KEY_R: "r"}
+		var key_map := {KEY_Q: "q", KEY_E: "e", KEY_R: "r"}
 		if key_map.has(k):
 			var s: String = key_map[k]
 			if ev.ctrl_pressed or ev.meta_pressed:
 				_learn(s)
 			else:
-				_begin_target(s)
-		elif k == KEY_A:
-			targeting = "attack"
-		elif k == KEY_S:
-			gm.player.order_stop()
-			targeting = ""
-		elif k == KEY_H:
-			gm.player.order_hold()
-			targeting = ""
+				_press(s)
 		elif k == KEY_O and (ev.ctrl_pressed or ev.meta_pressed):
 			_learn("attr")
 		elif k == KEY_F6:
@@ -124,18 +116,20 @@ func _unhandled_input(ev: InputEvent) -> void:
 			for h in gm.heroes:
 				h.gain_xp(h.xp_need())
 	elif ev is InputEventMouseButton:
-		if gm.state != C.S.PLAY or gm.paused or shp.shop_open or gm.player == null:
+		if gm.state != C.S.PLAY or gm.paused or shp.shop_open or gm.player == null or gm.autopilot:
 			return
-		var mp := get_global_mouse_position()
 		if ev.button_index == MOUSE_BUTTON_RIGHT:
 			right_held = ev.pressed
 			if ev.pressed:
-				if targeting != "":
-					targeting = ""
-					return
-				_right_click(mp)
-		elif ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed:
-			_left_click(mp)
+				_press("w")
+
+func _press(s: String) -> void:
+	if gm.player == null or gm.player.dead or gm.autopilot:
+		return
+	gm.player.ctl_aim = get_global_mouse_position()
+	var err: String = gm.player.press(s)
+	if err != "":
+		_deny(err)
 
 func _unit_at(p: Vector2, foes_only: bool):
 	var best_u = null
@@ -154,53 +148,6 @@ func _unit_at(p: Vector2, foes_only: bool):
 			bd = d2
 			best_u = h
 	return best_u
-
-func _right_click(p: Vector2) -> void:
-	if gm.player.dead: return
-	var e = _unit_at(p, true)
-	if e != null:
-		gm.player.order_attack(e)
-		_marker(e.position, Color(1.0, 0.3, 0.3))
-	else:
-		gm.player.order_move(p)
-		gm.player.cmd_pos = p
-		_marker(p, Color(0.3, 1.0, 0.4))
-
-func _left_click(p: Vector2) -> void:
-	if targeting == "attack":
-		targeting = ""
-		if gm.player.dead: return
-		var e = _unit_at(p, true)
-		if e == null:
-			e = gm.nearest_foe(gm.player.team, p, 480.0)
-		if e != null:
-			gm.player.order_attack(e)
-			_marker(e.position, Color(1.0, 0.3, 0.3))
-		else:
-			gm.player.order_amove(p)
-			_marker(p, Color(1.0, 0.3, 0.3))
-		return
-	if targeting in ["q", "w", "e", "r"]:
-		var s := targeting
-		targeting = ""
-		if gm.player.dead: return
-		var typ: String = gm.player.sdef[s]["type"]
-		var tgt = _ally_at(p) if typ == "ally" else _unit_at(p, true)
-		if typ == "ally" and tgt == null:
-			_deny("需要选择一个友方英雄（可以选自己）")
-			return
-		if tgt == null and (typ == "unit" or typ == "unit_or_point"):
-			tgt = gm.nearest_foe(gm.player.team, p, 90.0 if typ == "unit" else 36.0)
-		var err: String = gm.player.order_cast(s, tgt, p)
-		if err != "":
-			_deny(err)
-		return
-	var u = _unit_at(p, false)
-	if u != null:
-		selected = u
-		vw.sfx("select", 1.4, -12.0)
-	else:
-		selected = gm.player
 
 func _ally_at(p: Vector2):
 	var best_u = null
@@ -227,24 +174,6 @@ func _deny(msg: String) -> void:
 	tw.tween_property(hd.deny_lbl, "modulate:a", 0.0, 0.4)
 	vw.sfx("deny", 1.0, -6.0, 0.15)
 
-func _begin_target(s: String) -> void:
-	if gm.player.dead: return
-	var st: Dictionary = gm.player.sdef[s]
-	var typ: String = st["type"]
-	var err: String = gm.player.cast_error(s, gm.player if typ == "ally" else null) if typ != "unit" else ""
-	if typ == "unit":
-		var base_err: String = gm.player.cast_error(s, gm.player)
-		if base_err != "需要选择一个对方单位":
-			err = base_err
-	if err != "":
-		_deny(err)
-		return
-	if typ == "no_target":
-		var e2: String = gm.player.order_cast(s, null, gm.player.position)
-		if e2 != "": _deny(e2)
-		return
-	targeting = s
-
 func _learn(s: String) -> void:
 	if gm.state != C.S.PLAY or gm.player == null: return
 	if not gm.player.learn(s):
@@ -255,19 +184,25 @@ func _learn(s: String) -> void:
 	vw.sfx("learn")
 	vw._ring(gm.player.position, 10, 90, 0.35, Color(1.6, 1.4, 0.4), 4)
 
-func _hold_move(d: float) -> void:
-	if not right_held or targeting != "" or gm.player.dead:
+## every frame: WASD + mouse into the player's controller (skipped while the AI drives it: F6)
+func _hold_move(_d: float) -> void:
+	var h = gm.player
+	if h == null or gm.autopilot:
 		return
-	right_t -= d
-	if right_t > 0.0:
+	if gm.state != C.S.PLAY or gm.paused or shp.shop_open or h.dead:
+		h.ctl_move = Vector2.ZERO
+		h.ctl_fire = false
+		h.ctl_hold = false
 		return
-	right_t = 0.12
-	var mp := get_global_mouse_position()
-	if _unit_at(mp, true) == null:
-		if gm.player.cmd == Hero.C.MOVE:
-			gm.player.cmd_pos = mp
-		elif gm.player.cmd != Hero.C.ATTACK:
-			gm.player.order_move(mp)
+	var mv := Vector2.ZERO
+	if Input.is_physical_key_pressed(KEY_W): mv.y -= 1.0
+	if Input.is_physical_key_pressed(KEY_S): mv.y += 1.0
+	if Input.is_physical_key_pressed(KEY_A): mv.x -= 1.0
+	if Input.is_physical_key_pressed(KEY_D): mv.x += 1.0
+	h.ctl_move = mv.normalized()
+	h.ctl_aim = get_global_mouse_position()
+	h.ctl_fire = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	h.ctl_hold = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 
 func _inp_world_cleared() -> void:
 	selected = null

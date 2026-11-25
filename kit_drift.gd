@@ -43,7 +43,7 @@ func est_damage(s: String) -> float:
 		"r": return h.sv("r", "burst") + h.sv("r", "dps") * 3.0
 	return 0.0
 
-func cast(s: String, _tgt, pos: Vector2) -> void:
+func cast(s: String, _tgt, pos: Vector2, _chg := 0.0) -> void:
 	match s:
 		"q": _cast_q(pos)
 		"w": _cast_w(pos)

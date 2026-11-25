@@ -61,6 +61,8 @@ var player: Hero = null
 var heroes: Array = []
 var enemies: Array = []
 var hshots: Array = []
+## 3C: ranged basic attacks — straight projectiles, not homing: {owner, team, pos, dir, speed, left, dmg, info, r, trail}
+var bolts: Array = []
 var eshots: Array = []
 var zones: Array = []
 var runes: Array = []
@@ -135,6 +137,7 @@ func _clear_world() -> void:
 	for c in layer_trails.get_children():
 		c.queue_free()
 	zones.clear()
+	bolts.clear()
 	bosses.clear()
 	seen_kinds.clear()
 	team0.clear()
@@ -293,6 +296,7 @@ func threats_for(tm: int) -> Array:
 	for h in heroes:
 		if h.team != tm:
 			out.append_array(h.kit.threats())
+	out.append_array(bolt_threats(tm))
 	return out
 
 ## the team objective for the AI brain (round mode); {} when there is none
@@ -355,7 +359,7 @@ func visible_to(u, tm: int) -> bool:
 	return bool(_vis[tm].get(u.uid, true))
 
 func _update_vis() -> void:
-	if terrain == null or terrain.brush.is_empty():
+	if terrain == null:
 		return
 	for tm in 2:
 		var d := {}
@@ -364,9 +368,18 @@ func _update_vis() -> void:
 				d[u.uid] = _compute_vis(u, tm)
 		_vis[tm] = d
 
+## 3C: a team sees what is inside the vision radius of any of its living heroes (shared vision);
+## inside that, brush still hides (see visible_to)
 func _compute_vis(u, tm: int) -> bool:
 	if u.dead:
 		return true
+	var in_sight := false
+	for v in heroes:
+		if v.team == tm and not v.dead and v.position.distance_to(u.position) <= v.vision():
+			in_sight = true
+			break
+	if not in_sight:
+		return false
 	var b: int = terrain.brush_at(u.position)
 	if b < 0 or t - float(u.revealed_t) < 1.2:
 		return true
@@ -374,6 +387,72 @@ func _compute_vis(u, tm: int) -> bool:
 		if v.team == tm and not v.dead and (terrain.brush_at(v.position) == b or v.position.distance_to(u.position) < 150.0):
 			return true
 	return false
+
+# ------------------------------------------------------------ 3C basic attacks
+## foes (any team but tm) whose body touches the swing arc: within reach of p and inside the cone around dir
+func foes_in_arc(tm: int, p: Vector2, dir: Vector2, reach: float, arc: float) -> Array:
+	var out := []
+	for u in foes_in(tm, p, reach):
+		var rel: Vector2 = u.position - p
+		var dl := rel.length()
+		if dl < 1.0:
+			out.append(u)
+			continue
+		# angular half-size of the body widens the cone slightly
+		var slack: float = asin(clampf(float(u.radius) / dl, 0.0, 1.0))
+		if absf(dir.angle_to(rel)) <= arc * 0.5 + slack and has_los(p, u.position):
+			out.append(u)
+	return out
+
+func spawn_bolt(h, p: Vector2, dir: Vector2, dmg: float, info: Dictionary) -> void:
+	bolts.append({"owner": h, "team": h.team, "pos": p, "dir": dir, "speed": h.proj_speed(), "left": h.bolt_reach(),
+		"dmg": dmg, "info": info, "r": 8.0, "trail": p})
+	sfx("attack", rng.randf_range(1.1, 1.3), -10.0)
+
+func _update_bolts(d: float) -> void:
+	if bolts.is_empty():
+		return
+	var keep := []
+	for b in bolts:
+		var p0: Vector2 = b["pos"]
+		var step: float = minf(float(b["speed"]) * d, float(b["left"]))
+		var p1: Vector2 = p0 + b["dir"] * step
+		b["left"] = float(b["left"]) - step
+		b["trail"] = p0
+		var done := float(b["left"]) <= 0.0
+		if terrain != null and terrain.seg_blocked(p0, p1, 0.0):
+			p1 = terrain.sweep(p0, p1, 1.0)
+			done = true
+		var hit = null
+		var best := 1e9
+		for u in foes_in(int(b["team"]), p0.lerp(p1, 0.5), step * 0.5 + float(b["r"]) + 40.0):
+			var cp: Vector2 = Geometry2D.get_closest_point_to_segment(u.position, p0, p1)
+			if cp.distance_to(u.position) <= float(u.radius) + float(b["r"]):
+				var along: float = p0.distance_to(cp)
+				if along < best:
+					best = along
+					hit = u
+		if hit != null:
+			p1 = hit.position
+			done = true
+			var o = b["owner"]
+			if o != null and is_instance_valid(o):
+				o.attack_hit(hit, float(b["dmg"]), b["info"])
+				if bool(hit.is_hero):
+					o.stat_add("atk_hit")
+					hit.stat_add("atk_taken")
+		b["pos"] = p1
+		if not done:
+			keep.append(b)
+	bolts = keep
+
+## AI: basic-attack projectiles flying at team tm (for dodging), same format as kit threats()
+func bolt_threats(tm: int) -> Array:
+	var out := []
+	for b in bolts:
+		if int(b["team"]) != tm:
+			out.append({"kind": "shot", "pos": b["pos"], "dir": b["dir"], "w": float(b["r"]) * 2.0, "speed": float(b["speed"]), "left": float(b["left"]), "bolt": true})
+	return out
 
 func reveal(u) -> void:
 	u.revealed_t = t
@@ -454,7 +533,7 @@ func team_focus(tm: int, u) -> int:
 	for h in heroes:
 		if h.team != tm or h.dead:
 			continue
-		if h.cmd_target == u or (h.ai != null and h.ai.target == u):
+		if h.ai != null and h.ai.target == u:
 			n += 1
 	return n
 
@@ -1410,8 +1489,8 @@ func _update_zones(d: float) -> void:
 			"silence":
 				for th in inside:
 					th.silence = 2.5
-					if th.cmd == Hero.C.CAST:
-						th.cmd = Hero.C.IDLE
+					if th.casting():
+						th.interrupt()
 					if th.is_player:
 						_popup(th.position + Vector2(-30, -50), "沉默!", "set")
 				_ring(p, r, 20, 0.3, Color(1.8, 0.6, 2.4), 6)
@@ -1607,6 +1686,7 @@ func step(d: float) -> void:
 		h.update(d)
 		h.kit.tick_world(d)
 	sfx_origin = Vector2.INF
+	_update_bolts(d)
 	_separate_heroes()
 	_update_enemies(d)
 	_update_hshots(d)
@@ -1668,6 +1748,10 @@ func sfx(n: String, pitch := 1.0, vol := 0.0, min_gap := 0.0) -> void:
 func slash_fx(h, tgt, strong: bool) -> void:
 	if vw != null:
 		vw.slash_fx(h, tgt, strong)
+
+func swing_fx(h, dir: Vector2, strong: bool) -> void:
+	if vw != null:
+		vw.swing_fx(h, dir, strong)
 
 func toast(text: String, col := Color.WHITE, dur := 4.0) -> void:
 	if hd != null:

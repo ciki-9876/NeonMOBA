@@ -67,20 +67,15 @@ func _build_menu() -> void:
 	menu_main.add_theme_constant_override("separation", 14)
 	hd._place(menu_main, Control.PRESET_CENTER, -200, -40, 400, 420)
 	menu_root.add_child(menu_main)
-	var b1 := _menu_btn("生存模式  ·  30 分钟   [1]", 400, 64, 24)
-	b1.pressed.connect(_open_select.bind(C.M.SURVIVAL))
-	menu_main.add_child(b1)
-	var b2 := _menu_btn("3V3 英雄竞技场   [2]", 400, 64, 24)
-	b2.pressed.connect(_open_select.bind(C.M.ARENA))
-	menu_main.add_child(b2)
-	var b3 := _menu_btn("回合制 3V3 · 新规则原型   [3]", 400, 64, 24)
+	# stage 1.5: the click-to-move survival and old 3V3 arena modes are retired (branch archive/v0-click-control)
+	var b3 := _menu_btn("回合制 3V3   [1]", 400, 64, 24)
 	b3.pressed.connect(_open_select.bind(C.M.ROUNDS))
 	menu_main.add_child(b3)
-	var b4 := _menu_btn("3C 实验 · WASD 狙击手   [4]", 400, 64, 24)
+	var b4 := _menu_btn("3C 实验 · WASD 狙击手   [2]", 400, 64, 24)
 	b4.pressed.connect(open_exp3c)
 	menu_main.add_child(b4)
 	var hint := hd._label(15, Color(0.75, 0.75, 0.95), HORIZONTAL_ALIGNMENT_CENTER)
-	hint.text = "右键 移动/攻击   A 攻击指令   QWER 技能   Ctrl+QWER 学习\nB 商店（打开时暂停）   C 属性   Tab 计分板   Esc 暂停"
+	hint.text = "WASD 移动   鼠标瞄准   左键 普攻（按住连发）   右键 特色技能（可蓄力的按住蓄力）\nQ E R 技能   B 商店   C 属性   Tab 计分板   Esc 暂停   F6 AI 托管"
 	menu_main.add_child(hint)
 	# survival: pick a hero
 	menu_surv = Control.new()
@@ -140,7 +135,7 @@ func _build_menu() -> void:
 			for id in HeroesDB.ORDER:
 				ob.add_item("%s  ·  %s" % [HeroesDB.HEROES[id]["name"], HeroesDB.ROLE_NAMES[HeroesDB.HEROES[id]["role"]]])
 			ob.add_item("随机（按职业补位）")
-			ob.select(HeroesDB.ORDER.find("drift") if (tm == 0 and i == 0) else HeroesDB.ORDER.size())
+			ob.select(HeroesDB.ORDER.find("ember") if (tm == 0 and i == 0) else HeroesDB.ORDER.size())
 			row.add_child(ob)
 			arena_opts.append(ob)
 	var bottom := HBoxContainer.new()
@@ -219,7 +214,7 @@ func _hero_card(id: String) -> Control:
 	txt += "[color=#ff7a6a]力量%s %d(+%s)[/color]  [color=#6aff8a]敏捷%s %d(+%s)[/color]  [color=#6ab0ff]智力%s %d(+%s)[/color]  %s\n" % [
 		star["str"], int(b["str"]), shp._num(gn["str"]), star["agi"], int(b["agi"]), shp._num(gn["agi"]), star["int"], int(b["int"]), shp._num(gn["int"]), "近战" if bool(d["melee"]) else "射手"]
 	for s in ["q", "w", "e", "r"]:
-		txt += "[color=#ffd23f]%s[/color] %s  " % [s.to_upper(), d["skills"][s]["name"]]
+		txt += "[color=#ffd23f]%s[/color] %s  " % [("右键" if s == "w" and bool(d.get("c3", false)) else s.to_upper()), d["skills"][s]["name"]]
 	txt += "\n[color=#a0ffa0]%s[/color]" % d["combo"]
 	body.text = txt
 	body.custom_minimum_size = Vector2(380, 0)
@@ -245,7 +240,7 @@ func _show_menu() -> void:
 	hd.center_lbl.label_settings.font_color = Color(0.4, 1.0, 1.0)
 	hd.center_lbl.modulate.a = 1.0
 	hd.sub_lbl.modulate.a = 1.0
-	hd.sub_lbl.text = "霓 虹 漂 移\n\n生存最长  %s" % hd._fmt(hd.best)
+	hd.sub_lbl.text = "霓 虹 漂 移"
 
 ## 3C experiment: standalone scene (exp3c/), Esc there comes back here
 func open_exp3c() -> void:

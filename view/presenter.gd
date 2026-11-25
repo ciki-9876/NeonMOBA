@@ -122,6 +122,76 @@ func add_shake(v: float, src) -> void:
 		v *= 0.5
 	gm.shake = maxf(gm.shake, v)
 
+## 3C melee: the swing sweeps the whole arc in front of the hero
+func swing_fx(h, dir: Vector2, strong: bool) -> void:
+	var col: Color = Color(2.6, 0.5, 0.6) if strong else Color(h.def["col"])
+	var reach: float = h.melee_reach()
+	var arc: float = h.melee_arc()
+	var base: float = dir.angle()
+	for ring in 2:
+		var l := Line2D.new()
+		l.width = 6.0 if ring == 0 else 3.0
+		l.default_color = Color(col.r, col.g, col.b, 0.9 if ring == 0 else 0.5)
+		var r: float = reach * (1.0 if ring == 0 else 0.7)
+		for i in 13:
+			var a := base - arc / 2.0 + arc * i / 12.0
+			l.add_point(h.position + Vector2.from_angle(a) * r)
+		fx.add_child(l)
+		var tw := l.create_tween()
+		tw.tween_property(l, "modulate:a", 0.0, 0.2)
+		tw.tween_callback(l.queue_free)
+	sfx("ahit", rng.randf_range(0.6, 0.75), -8.0, 0.04)
+
+func _draw_bolts(o: Node2D) -> void:
+	for b in gm.bolts:
+		var ow = b["owner"]
+		var col := Color(0.6, 2.2, 2.6) if int(b["team"]) == _viewer() else Color(2.6, 0.7, 0.6)
+		if ow != null and is_instance_valid(ow) and ow.is_player:
+			col = Color(0.6, 2.6, 2.8)
+		var p: Vector2 = b["pos"]
+		var tail: Vector2 = p - (b["dir"] as Vector2) * 26.0
+		o.draw_line(tail, p, col, 5.0)
+		o.draw_circle(p, 4.0, Color(3, 3, 3))
+
+## the player's aim: crosshair line toward the cursor up to the basic attack's reach; charge line for charge skills
+func _draw_aim(o: Node2D, h) -> void:
+	var dir := Vector2.from_angle(h.face)
+	if h.charging != "":
+		var cfg: Dictionary = h.charge_cfg()
+		var lc := Color(3.0, 2.4, 0.6, 0.9) if h.charge >= 1.0 else Color(2.6, 0.6, 0.5, 0.3 + 0.5 * h.charge)
+		o.draw_line(h.position + dir * (h.radius + 10.0), h.position + dir * float(h.kit.ai_meta(h.charging).get("reach", 800.0)) * lerpf(0.8, 1.4, h.charge) / 1.4, lc, 1.0 + 2.0 * h.charge)
+		return
+	if bool(h.def["melee"]):
+		var ma: float = h.melee_arc()
+		o.draw_arc(h.position, h.melee_reach(), h.face - ma / 2.0, h.face + ma / 2.0, 20, Color(1, 1, 1, 0.12), 1.5)
+	else:
+		var r: float = h.bolt_reach()
+		o.draw_line(h.position + dir * (h.radius + 10.0), h.position + dir * r, Color(0.6, 2.0, 2.4, 0.18), 1.5)
+		o.draw_arc(h.position, h.atk_range(), h.face - 0.25, h.face + 0.25, 8, Color(0.6, 2.0, 2.4, 0.35), 2.0)
+
+## camera: centred on the player with a look-ahead toward the cursor; its height follows the hero's vision
+## (more vision = higher camera, capped) and charge skills pull it back further while charging
+var _zoom := 1.0
+func _update_camera(delta: float) -> void:
+	var h = gm.player
+	if h == null:
+		return
+	var target_z := 1.0
+	var look := Vector2.ZERO
+	if gm.mode == C.M.ROUNDS:
+		target_z = clampf(360.0 / (h.vision() * 0.6), 0.55, 1.0)
+		if h.charging != "":
+			var cz: float = float(h.charge_cfg().get("zoom", 1.0))
+			target_z = maxf(0.45, target_z * lerpf(1.0, cz, h.charge))
+		if not h.dead:
+			look = ((cam.get_global_mouse_position() - h.position) * 0.18).limit_length(160.0)
+	var rate := 8.0 if target_z < _zoom else 4.0
+	_zoom = lerpf(_zoom, target_z, 1.0 - exp(-rate * delta))
+	cam.zoom = Vector2(_zoom, _zoom)
+	if not h.dead:
+		var tp: Vector2 = h.position + look + (Vector2(0, 70) if gm.mode != C.M.ROUNDS else Vector2.ZERO)
+		cam.position = cam.position.lerp(tp, 1.0 - exp(-10.0 * delta)) if gm.mode == C.M.ROUNDS else tp
+
 func slash_fx(h, tgt, strong: bool) -> void:
 	var col: Color = Color(2.6, 0.5, 0.6) if strong else Color(2.2, 1.6, 1.8)
 	var l := Line2D.new()
@@ -245,7 +315,7 @@ func _draw_minimap() -> void:
 		m.draw_circle(c + h.position * k, 5.0 if h.is_player else 3.5, col)
 		if h.is_player:
 			m.draw_arc(c + h.position * k, 7.0, 0, TAU, 16, Color.WHITE, 1.5)
-	var vr := Rect2(c + (cam.get_screen_center_position() - Vector2(640, 360)) * k, Vector2(1280, 720) * k)
+	var vr := Rect2(c + (cam.get_screen_center_position() - Vector2(640, 360) / cam.zoom.x) * k, Vector2(1280, 720) / cam.zoom.x * k)
 	m.draw_rect(vr, Color(1, 1, 1, 0.5), false, 1.0)
 
 func _draw_overlay() -> void:
@@ -277,16 +347,17 @@ func _draw_overlay() -> void:
 	for h in gm.heroes:
 		if _seen(h):
 			h.kit.draw(o)
-	var view := Rect2(cam.get_screen_center_position() - Vector2(700, 420), Vector2(1400, 840))
+	var half_view: Vector2 = Vector2(700, 420) / cam.zoom.x
+	var view := Rect2(cam.get_screen_center_position() - half_view, half_view * 2.0)
+	_draw_bolts(o)
 	# heroes: team rings, windup / backswing / cast feedback, bars
 	for h in gm.heroes:
 		if h.dead or not view.has_point(h.position) or not _seen(h): continue
 		_draw_hero(o, h, tick)
 	if inp.selected != null and is_instance_valid(inp.selected) and inp.selected != gm.player and not inp.selected.dead:
 		o.draw_arc(inp.selected.position, inp.selected.radius + 10.0, 0, TAU, 32, Color(1.0, 0.85, 0.3, 0.9), 2.5)
-	if gm.player != null and not gm.player.dead and gm.player.cmd == Hero.C.ATTACK and gm.player.is_foe(gm.player.cmd_target):
-		var ct = gm.player.cmd_target
-		o.draw_arc(ct.position, ct.radius + 14.0, tick * 4.0, tick * 4.0 + TAU * 0.75, 24, Color(1.0, 0.3, 0.3, 0.8), 2.0)
+	if gm.player != null and not gm.player.dead and gm.mode == C.M.ROUNDS:
+		_draw_aim(o, gm.player)
 	for e in gm.enemies:
 		if e.dead or not view.has_point(e.position): continue
 		var w := clampf(e.radius * 2.2, 36.0, 220.0)
@@ -345,12 +416,16 @@ func _draw_hero(o: Node2D, h, tick: float) -> void:
 		var wc := Color(0.5, 2.2, 2.6, 0.95 * alpha) if h.team == 0 else Color(2.6, 0.7, 0.6, 0.95 * alpha)
 		o.draw_arc(pos, h.radius + 18.0, -PI / 2.0, -PI / 2.0 + TAU * k, 40, wc, 3.5)
 		o.draw_circle(nose, 2.0 + 7.0 * k, Color(wc.r, wc.g, wc.b, (0.35 + 0.6 * k) * alpha))
-		if h.is_foe(h.atk_target):
-			o.draw_line(nose, h.atk_target.position, Color(wc.r, wc.g, wc.b, (0.12 + 0.4 * k) * alpha), 1.5)
+		if bool(h.def["melee"]):
+			var ma: float = h.melee_arc()
+			o.draw_arc(pos, h.melee_reach() * (0.6 + 0.4 * k), h.face - ma / 2.0, h.face + ma / 2.0, 24, Color(wc.r, wc.g, wc.b, (0.15 + 0.4 * k) * alpha), 2.0)
 	elif h.atk_phase == 2:
 		var k2: float = clampf(h.atk_t / maxf(h.atk_bs_total, 0.01), 0.0, 1.0)
 		o.draw_arc(pos, h.radius + 18.0, -PI / 2.0, -PI / 2.0 + TAU * k2, 40, Color(0.75, 0.75, 0.85, 0.5 * alpha), 2.0)
-	if h.cmd == Hero.C.CAST and h.cast_t > 0.0:
+	if h.charging != "":
+		var chc: Color = Color(3.0, 2.4, 0.6) if h.charge >= 1.0 else Color(h.def["col"])
+		o.draw_arc(pos, h.radius + 22.0, -PI / 2.0, -PI / 2.0 + TAU * h.charge, 40, chc, 4.0)
+	if h.casting() and h.cast_t > 0.0:
 		var kc: float = clampf(1.0 - h.cast_t / maxf(h.cast_point_total(), 0.01), 0.0, 1.0)
 		var cc: Color = h.def["col"]
 		o.draw_arc(pos, h.radius + 22.0, -PI / 2.0, -PI / 2.0 + TAU * kc, 40, cc, 4.0)
@@ -584,13 +659,13 @@ func frame(delta: float) -> void:
 		var vt := _viewer()
 		for h in gm.heroes:
 			var vis: bool = gm.visible_to(h, vt)
-			h.visible = vis
+			h.visible = vis and not h.dead
 			# own heroes hiding in brush are drawn translucent
 			h.modulate.a = 0.55 if (h.team == vt and not h.dead and gm.terrain.brush_at(h.position) >= 0) else 1.0
-	if gm.player != null and not gm.player.dead:
-		cam.position = gm.player.position + Vector2(0, 70)
+	_update_camera(delta)
 	cam.offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * gm.shake
 	grid.cam_pos = cam.get_screen_center_position()
+	grid.half = Vector2(1000, 640) / cam.zoom.x
 	grid.pulse = maxf(0.0, grid.pulse - delta * 1.5)
 	grid.queue_redraw()
 	overlay.queue_redraw()

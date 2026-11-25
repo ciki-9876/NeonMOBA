@@ -5,7 +5,10 @@ extends "res://kit_base.gd"
 ##   * the AI   (ai_meta() infers roles / aim / radius / damage / healing from the effects)
 ##   * tooltips (tip() writes the description from the effects)
 ##
-## Effect block: {"do": <op>, "on": <selector>, ...params}. Any numeric param may be a per-level array.
+## Effect block: {"do": <op>, "on": <selector>, ...params}. Any numeric param may be a per-level array, or a
+## scaling dictionary {"v": base (number or per-level array), "str"/"agi"/"int": k × attribute, "atk": k × attack damage,
+## "hp": k × caster max hp, "charge": [x at no charge, x at full charge] multiplier} — the right-click skill (key "w",
+## never levelled) uses these so it grows with the hero. Charge skills: "charge": {time, min, move} on the skill.
 ## Selectors (on):  target | self | enemies | allies | line | all_allies      (+ "at": pos|self|target, "r": radius)
 ## Ops:
 ##   damage {amt, amt_hp (fraction of caster max hp), dtype: magic|phys|pure}
@@ -22,6 +25,7 @@ var shots: Array = []
 var zones: Array = []
 var aura_t := 0.0
 var _meta_cache := {}
+var _chg := 0.0           # charge (0..1) of the cast being resolved; scaling dicts read it
 
 func reset() -> void:
 	aura_t = 0.0
@@ -45,6 +49,20 @@ func threats() -> Array:
 func val(p, lv: int) -> float:
 	if p == null:
 		return 0.0
+	if p is Dictionary:
+		var dct: Dictionary = p
+		var v: float = val(dct.get("v", 0.0), lv)
+		for a in ["str", "agi", "int"]:
+			if dct.has(a):
+				v += float(dct[a]) * float(h.ST.get(a, 0.0))
+		if dct.has("atk"):
+			v += float(dct["atk"]) * h.atk_dmg()
+		if dct.has("hp"):
+			v += float(dct["hp"]) * h.max_hp
+		if dct.has("charge"):
+			var cm: Array = dct["charge"]
+			v *= lerpf(float(cm[0]), float(cm[1]), _chg)
+		return v
 	if p is Array:
 		var a: Array = p
 		if a.is_empty():
@@ -95,13 +113,13 @@ func tick(d: float) -> void:
 			for u in g.allies_in(h.team, h.position, float(a.get("r", 700.0))):
 				u.add_buff(str(a["id"]), 0.6, val(a["v"], lv))
 
-func cast(s: String, tgt, pos: Vector2) -> void:
+func cast(s: String, tgt, pos: Vector2, chg := 0.0) -> void:
 	var dir: Vector2 = (pos - h.position).normalized()
 	if tgt != null and is_instance_valid(tgt) and tgt != h:
 		dir = (tgt.position - h.position).normalized()
 	if dir == Vector2.ZERO:
 		dir = Vector2.from_angle(h.face)
-	var ctx := {"s": s, "lv": int(h.sk[s]), "target": tgt, "pos": pos, "dir": dir, "origin": h.position}
+	var ctx := {"s": s, "lv": maxi(1, int(h.sk[s])), "target": tgt, "pos": pos, "dir": dir, "origin": h.position, "charge": chg}
 	run(h.sdef[s].get("effects", []), ctx)
 
 # ------------------------------------------------------------ effect interpreter
@@ -150,6 +168,7 @@ func _units(e: Dictionary, ctx: Dictionary) -> Array:
 
 func _do(e: Dictionary, ctx: Dictionary) -> void:
 	var lv: int = ctx["lv"]
+	_chg = float(ctx.get("charge", 0.0))
 	var op: String = str(e["do"])
 	match op:
 		"damage":
@@ -256,9 +275,6 @@ func _after_dash(effects: Array, ctx: Dictionary) -> void:
 	ctx["pos"] = h.position
 	ctx["origin"] = h.position
 	run(effects, ctx)
-	var t = ctx["target"]
-	if h.is_foe(t):
-		h.order_attack(t)
 
 # ------------------------------------------------------------ lingering things (run even when the hero is dead)
 func tick_world(d: float) -> void:
@@ -400,7 +416,7 @@ func _walk(effects: Array, acc: Dictionary, lv: int, mult: float) -> void:
 func ai_meta(s: String) -> Dictionary:
 	var st: Dictionary = h.sdef[s]
 	var lv: int = maxi(1, int(h.sk[s]))
-	var key := "%s%d%d" % [s, lv, int(h.max_hp / 200.0)]
+	var key := "%s%d%d_%d_%d" % [s, lv, int(h.max_hp / 200.0), int(h.atk_dmg() / 10.0), int(float(h.ST.get("int", 0.0)) / 5.0)]
 	if _meta_cache.has(key):
 		return _meta_cache[key]
 	var m := {}
@@ -409,7 +425,9 @@ func ai_meta(s: String) -> Dictionary:
 		_meta_cache[key] = m
 		return m
 	var acc := {"roles": {}, "dmg": 0.0, "heal": 0.0, "radius": 0.0, "at": "pos", "skillshot": false, "reach": 0.0}
+	_chg = 1.0   # estimates assume a full charge
 	_walk(st["effects"], acc, lv, 1.0)
+	_chg = 0.0
 	var roles: Array = acc["roles"].keys()
 	if roles.has("nuke") and float(acc["radius"]) > 0.0 and not roles.has("heal"):
 		roles.append("aoe")
@@ -428,8 +446,10 @@ func ai_meta(s: String) -> Dictionary:
 		if not roles.has("heal"):
 			roles.append("heal")
 		roles.append("team_heal")
-	m = {"roles": roles, "aim": aim, "radius": float(acc["radius"]), "est_dmg": float(acc["dmg"]),
-		"est_heal": float(acc["heal"]), "reach": maxf(float(acc["reach"]), cast_range(s, null))}
+	if st.has("charge"):
+		m["charge"] = true
+	m.merge({"roles": roles, "aim": aim, "radius": float(acc["radius"]), "est_dmg": float(acc["dmg"]),
+		"est_heal": float(acc["heal"]), "reach": maxf(float(acc["reach"]), cast_range(s, null))})
 	var over: Dictionary = st.get("ai", {})
 	for k in over:
 		m[k] = over[k]
@@ -449,7 +469,32 @@ func est_heal(s: String) -> float:
 # ------------------------------------------------------------ auto-generated tooltip
 const BUFF_NAMES := {"haste": "移速", "as": "攻速", "armor": "护甲", "dr": "伤害减免", "regen": "生命回复"}
 
+const SCALE_NAMES := {"str": "力量", "agi": "敏捷", "int": "智力", "atk": "攻击力", "hp": "最大生命"}
+
 func _vals(p) -> String:
+	if p is Dictionary:
+		# scaling value: "40 + 1.6×智力（当前 136）"; charge range appended
+		var dct: Dictionary = p
+		var parts := []
+		if float(val(dct.get("v", 0.0), 1)) != 0.0 or dct.get("v", 0.0) is Array:
+			parts.append(_vals(dct.get("v", 0.0)))
+		for k in ["str", "agi", "int", "atk", "hp"]:
+			if dct.has(k):
+				parts.append("%s×%s" % [_n(float(dct[k])), SCALE_NAMES[k]])
+		var txt := " + ".join(PackedStringArray(parts))
+		var old := _chg
+		var lv := maxi(1, int(h.sk.get("w", 1)))
+		_chg = 0.0
+		var now0 := val(p, lv)
+		_chg = 1.0
+		var now1 := val(p, lv)
+		_chg = old
+		if dct.has("charge"):
+			var cm: Array = dct["charge"]
+			if txt.contains("×"):
+				return "（%s）×%s~%s 随蓄力（当前 %s~%s）" % [txt, _n(float(cm[0]) * 100.0) + "%", _n(float(cm[1]) * 100.0) + "%", _n(now0), _n(now1)]
+			return "%s~%s（随蓄力）" % [_n(now0), _n(now1)]
+		return "%s（当前 %s）" % [txt, _n(now0)] if txt.contains("×") else txt
 	if p is Array:
 		var parts := []
 		for x in p:
@@ -517,7 +562,7 @@ func tip(s: String) -> String:
 	var st: Dictionary = h.sdef[s]
 	var typ_name: String = {"passive": "被动", "no_target": "主动·无目标", "point": "主动·地点", "unit": "主动·对方单位",
 		"ally": "主动·友方英雄", "unit_or_point": "主动·单位或地点"}[st["type"]]
-	var head := "%s %s（%s%s）\n" % [s.to_upper(), st["name"], typ_name, "，6/12/18 级可学" if s == "r" else ""]
+	var head := "%s %s（%s%s）\n" % [("右键" if s == "w" and h.is_c3() else s.to_upper()), st["name"], typ_name, "，6/12/18 级可学" if s == "r" else ""]
 	if st.has("note"):
 		head += str(st["note"]) + "\n"
 	var body := ""

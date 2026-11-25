@@ -15,7 +15,10 @@ extends RefCounted
 ##   prefer_status : status on the target that makes the skill much better (combo hint, e.g. "charged")
 ##   setup_status  : status this skill applies (lets the AI open a combo with it)
 
-const ORDER := ["aegis", "anchor", "frost", "drift", "blade", "ember", "lumen", "seer", "tide"]
+## heroes rebuilt for the 3C control scheme (WASD + mouse aim, right-click signature skill, "c3": true).
+## The others still have their click-to-move era kits and come back as they are rebuilt (stage 1.5).
+const ORDER := ["frost", "ember", "tide"]
+const LEGACY := ["aegis", "anchor", "drift", "blade", "lumen", "seer"]
 const ROLE_NAMES := {"tank": "坦克", "carry": "输出", "support": "辅助"}
 
 const HEROES := {
@@ -235,24 +238,24 @@ const HEROES := {
 	# Plan: 霜铠 / 潮歌 slow and root, 烬星 drops area burst on the people who cannot move.
 	# ======================================================================
 	"frost": {
-		"name": "霜铠卫士", "short": "霜铠", "role": "tank", "title": "坦克 · 力量 · 冰封控场",
-		"blurb": "寒冰冲击减速对手，霜之壁垒护住自己并冻缓逼近者，绝对零度把一群人定在原地。",
+		"name": "霜铠卫士", "short": "霜铠", "role": "tank", "title": "坦克 · 力量 · 冰封控场", "c3": true,
+		"blurb": "右键寒冰冲击远程减速，壁垒顶在前排，绝对零度把一群人定在原地。挥动冰锤横扫身前一片。",
 		"primary": "str", "base": {"str": 25.0, "agi": 13.0, "int": 17.0}, "gain": {"str": 3.3, "agi": 1.3, "int": 1.7},
-		"base_dmg": 33.0, "bat": 1.65, "range": 150.0, "ms": 295.0, "armor": 3.0, "melee": true,
-		"atk_point": 0.38, "backswing": 0.42, "proj_speed": 0.0, "turn": 15.0, "radius": 20.0,
+		"base_dmg": 30.0, "bat": 1.7, "range": 150.0, "arc": 110.0, "ms": 300.0, "armor": 3.0, "melee": true,
+		"atk_point": 0.32, "backswing": 0.38, "proj_speed": 0.0, "vision": 850.0, "turn": 15.0, "radius": 20.0,
 		"sprite": "frost", "kit": "res://kit_data.gd", "col": Color(1.2, 2.2, 2.8),
-		"icons": {"q": "frost_q", "w": "frost_w", "e": "frost_e", "r": "frost_r"},
+		"icons": {"q": "frost_w", "w": "frost_q", "e": "frost_e", "r": "frost_r"},
 		"skills": {
-			"q": {"name": "寒冰冲击", "type": "point", "max": 4, "ind": "line", "width": 70.0, "range": 0,
-				"mana": [55, 55, 55, 55], "cd": [9.0, 8.0, 7.0, 6.0], "cast_point": 0.25,
+			"w": {"name": "寒冰冲击", "type": "point", "max": 1, "ind": "line", "width": 70.0, "range": 0,
+				"mana": 50, "cd": 8.0, "cast_point": 0.2,
 				"effects": [{"do": "sfx", "name": "whistle", "pitch": 0.8},
-					{"do": "shot", "speed": 1500.0, "len": [700, 750, 800, 850], "w": 70.0, "col": Color(1.2, 2.2, 2.8), "then": [
-						{"do": "damage", "on": "target", "amt": [60, 95, 130, 165]},
-						{"do": "slow", "on": "target", "pct": 0.4, "dur": [2.0, 2.5, 3.0, 3.5]},
+					{"do": "shot", "speed": 1500.0, "len": 780.0, "w": 70.0, "col": Color(1.2, 2.2, 2.8), "then": [
+						{"do": "damage", "on": "target", "amt": {"v": 40, "str": 1.5}},
+						{"do": "slow", "on": "target", "pct": 0.4, "dur": 2.5},
 						{"do": "fx", "kind": "ring", "at": "target", "r": 70.0, "col": Color(1.2, 2.2, 2.8)},
 						{"do": "sfx", "name": "chain", "pitch": 1.2}]}]},
-			"w": {"name": "霜之壁垒", "type": "no_target", "max": 4, "ind": "self", "radius": 300.0,
-				"mana": [45, 45, 45, 45], "cd": [16.0, 15.0, 14.0, 13.0], "cast_point": 0.2,
+			"q": {"name": "霜之壁垒", "type": "no_target", "max": 4, "ind": "self", "radius": 300.0,
+				"mana": [45, 45, 45, 45], "cd": [16.0, 15.0, 14.0, 13.0], "cast_point": 0.15,
 				"effects": [{"do": "barrier", "on": "self", "amt": [120, 180, 240, 300], "amt_hp": 0.05, "dur": 5.0},
 					{"do": "buff", "on": "self", "id": "armor", "v": [4, 6, 8, 10], "dur": 5.0},
 					{"do": "slow", "on": "enemies", "at": "self", "r": 300.0, "pct": 0.35, "dur": 2.0},
@@ -269,27 +272,28 @@ const HEROES := {
 					{"do": "sfx", "name": "nova", "pitch": 0.8}, {"do": "shake", "v": 8.0}],
 				"ai": {"min_heroes": 2}},
 		},
-		"combo": "Q 寒冰冲击减速追击者  →  W 壁垒顶在前排  →  R 绝对零度定住一群  →  烬星轰炸",
-		"ai_learn": ["q", "w", "e"],
+		"combo": "右键 寒冰冲击减速  →  贴上去横扫  →  Q 壁垒顶在前排  →  R 绝对零度定住一群  →  烬星蓄满灼焰弹",
+		"ai_learn": ["q", "e"],
 		"build": ["phase", "vitality", "perseverance", "ac", "shiva", "heart"],
 	},
 	"ember": {
-		"name": "烬星法师", "short": "烬星", "role": "carry", "title": "输出 · 智力 · 范围爆破",
-		"blurb": "灼焰弹贯穿一线，炎爆术覆盖落点，陨星坠落把被定住的人群烧成灰烬。身板脆，全靠队友撑住。",
+		"name": "烬星法师", "short": "烬星", "role": "carry", "title": "输出 · 智力 · 范围爆破", "c3": true,
+		"blurb": "按住右键蓄力灼焰弹，蓄得越久越粗、越远、越痛；炎爆术覆盖落点，陨星坠落收割被定住的人群。身板脆。",
 		"primary": "int", "base": {"str": 18.0, "agi": 17.0, "int": 25.0}, "gain": {"str": 2.0, "agi": 1.8, "int": 3.2},
-		"base_dmg": 28.0, "bat": 1.6, "range": 560.0, "ms": 295.0, "armor": 0.0, "melee": false,
-		"atk_point": 0.3, "backswing": 0.38, "proj_speed": 1100.0, "turn": 17.0, "radius": 16.0,
+		"base_dmg": 28.0, "bat": 1.6, "range": 460.0, "ms": 300.0, "armor": 0.0, "melee": false,
+		"atk_point": 0.25, "backswing": 0.3, "proj_speed": 1150.0, "vision": 950.0, "turn": 17.0, "radius": 16.0,
 		"sprite": "ember", "kit": "res://kit_data.gd", "col": Color(2.8, 0.9, 0.2),
-		"icons": {"q": "ember_q", "w": "ember_w", "e": "ember_e", "r": "ember_r"},
+		"icons": {"q": "ember_w", "w": "ember_q", "e": "ember_e", "r": "ember_r"},
 		"skills": {
-			"q": {"name": "灼焰弹", "type": "point", "max": 4, "ind": "line", "width": 80.0, "range": 0,
-				"mana": [80, 85, 90, 95], "cd": [6.0, 5.5, 5.0, 4.5], "cast_point": 0.25,
+			"w": {"name": "灼焰弹", "type": "point", "max": 1, "ind": "line", "width": 80.0, "range": 0,
+				"mana": 60, "cd": 4.5, "charge": {"time": 1.0, "min": 0.15, "move": 0.55, "zoom": 0.85},
 				"effects": [{"do": "sfx", "name": "lance", "pitch": 0.9},
-					{"do": "shot", "speed": 1400.0, "len": [800, 850, 900, 950], "w": 80.0, "pierce": true, "col": Color(2.8, 0.9, 0.2), "then": [
-						{"do": "damage", "on": "target", "amt": [70, 115, 160, 205]},
+					{"do": "shot", "speed": 1500.0, "len": {"v": 720, "charge": [0.8, 1.4]}, "w": {"v": 60, "charge": [0.8, 1.6]},
+						"pierce": true, "col": Color(2.8, 0.9, 0.2), "then": [
+						{"do": "damage", "on": "target", "amt": {"v": 40, "int": 1.6, "charge": [0.5, 1.3]}},
 						{"do": "fx", "kind": "burst", "at": "target", "r": 120.0, "col": Color(2.8, 0.9, 0.2)}]}]},
-			"w": {"name": "炎爆术", "type": "point", "max": 4, "ind": "circle", "radius": 220.0, "range": 700,
-				"mana": [100, 110, 120, 130], "cd": [11.0, 10.0, 9.0, 8.0], "cast_point": 0.3,
+			"q": {"name": "炎爆术", "type": "point", "max": 4, "ind": "circle", "radius": 220.0, "range": 700,
+				"mana": [100, 110, 120, 130], "cd": [11.0, 10.0, 9.0, 8.0], "cast_point": 0.25,
 				"effects": [{"do": "delay", "t": 0.6, "r": 220.0, "col": Color(2.8, 0.9, 0.2), "then": [
 					{"do": "damage", "on": "enemies", "at": "pos", "r": 220.0, "amt": [85, 140, 195, 250]},
 					{"do": "slow", "on": "enemies", "at": "pos", "r": 220.0, "pct": 0.3, "dur": 1.5},
@@ -297,7 +301,7 @@ const HEROES := {
 					{"do": "sfx", "name": "nova", "pitch": 0.9}]}]},
 			"e": {"name": "余烬", "type": "passive", "max": 4, "passive": {"as": [8, 16, 24, 32], "ms": [5, 10, 15, 20]}},
 			"r": {"name": "陨星坠落", "type": "point", "max": 3, "ind": "circle", "radius": 340.0, "range": 800,
-				"mana": [220, 290, 360], "cd": [100.0, 85.0, 70.0], "cast_point": 0.35,
+				"mana": [220, 290, 360], "cd": [100.0, 85.0, 70.0], "cast_point": 0.3,
 				"effects": [{"do": "sfx", "name": "singularity", "pitch": 1.3},
 					{"do": "delay", "t": 1.0, "r": 340.0, "col": Color(2.8, 0.7, 0.1), "then": [
 						{"do": "damage", "on": "enemies", "at": "pos", "r": 340.0, "amt": [220, 330, 440]},
@@ -308,33 +312,33 @@ const HEROES := {
 							{"do": "damage", "on": "enemies", "at": "pos", "r": 340.0, "amt": [15, 25, 35]}]}]}],
 				"ai": {"min_heroes": 2}},
 		},
-		"combo": "等霜铠 / 潮歌的减速和定身落下  →  W 炎爆术覆盖落点  →  R 陨星坠落收割  →  Q 贯穿残血",
-		"ai_learn": ["q", "w", "e"],
+		"combo": "等霜铠 / 潮歌的减速和定身落下  →  Q 炎爆术覆盖落点  →  R 陨星坠落  →  蓄满右键灼焰弹贯穿残血",
+		"ai_learn": ["q", "e"],
 		"build": ["sage", "treads", "kaya", "aether", "shiva", "octarine"],
 	},
 	"tide": {
-		"name": "潮歌祭司", "short": "潮歌", "role": "support", "title": "辅助 · 智力 · 潮汐增益",
-		"blurb": "涌泉治疗并持续回血，漩涡拖慢对手，全队潮汐加速；惊涛骇浪一次性治疗队友、减速对手。",
+		"name": "潮歌祭司", "short": "潮歌", "role": "support", "title": "辅助 · 智力 · 潮汐增益", "c3": true,
+		"blurb": "右键涌泉治疗鼠标附近的队友并持续回血，漩涡拖慢对手，全队潮汐加速；惊涛骇浪一次性治疗队友、减速对手。",
 		"primary": "int", "base": {"str": 17.0, "agi": 17.0, "int": 24.0}, "gain": {"str": 1.8, "agi": 1.8, "int": 3.0},
-		"base_dmg": 26.0, "bat": 1.7, "range": 540.0, "ms": 305.0, "armor": 1.0, "melee": false,
-		"atk_point": 0.33, "backswing": 0.4, "proj_speed": 1000.0, "turn": 18.0, "radius": 16.0,
+		"base_dmg": 26.0, "bat": 1.7, "range": 440.0, "ms": 305.0, "armor": 1.0, "melee": false,
+		"atk_point": 0.28, "backswing": 0.32, "proj_speed": 1000.0, "vision": 1000.0, "turn": 18.0, "radius": 16.0,
 		"sprite": "tide", "kit": "res://kit_data.gd", "col": Color(0.4, 2.2, 2.0),
-		"icons": {"q": "tide_q", "w": "tide_w", "e": "tide_e", "r": "tide_r"},
+		"icons": {"q": "tide_w", "w": "tide_q", "e": "tide_e", "r": "tide_r"},
 		"skills": {
-			"q": {"name": "涌泉", "type": "ally", "max": 4, "ind": "ally", "range": 700,
-				"mana": [70, 75, 80, 85], "cd": [9.0, 8.5, 8.0, 7.5], "cast_point": 0.2,
-				"effects": [{"do": "heal", "on": "target", "amt": [60, 100, 140, 180]},
-					{"do": "buff", "on": "target", "id": "regen", "v": [4, 6, 8, 10], "dur": 4.0},
+			"w": {"name": "涌泉", "type": "ally", "max": 1, "ind": "ally", "range": 700,
+				"mana": 65, "cd": 8.0, "cast_point": 0.15,
+				"effects": [{"do": "heal", "on": "target", "amt": {"v": 40, "int": 1.6}},
+					{"do": "buff", "on": "target", "id": "regen", "v": {"v": 2, "int": 0.08}, "dur": 4.0},
 					{"do": "fx", "kind": "burst", "at": "target", "r": 150.0, "col": Color(0.4, 2.2, 2.0)}, {"do": "sfx", "name": "mend", "pitch": 1.1}]},
-			"w": {"name": "漩涡", "type": "point", "max": 4, "ind": "circle", "radius": 260.0, "range": 700,
-				"mana": [90, 95, 100, 105], "cd": [12.0, 11.0, 10.0, 9.0], "cast_point": 0.3,
+			"q": {"name": "漩涡", "type": "point", "max": 4, "ind": "circle", "radius": 260.0, "range": 700,
+				"mana": [90, 95, 100, 105], "cd": [12.0, 11.0, 10.0, 9.0], "cast_point": 0.25,
 				"effects": [{"do": "sfx", "name": "singularity", "pitch": 1.6, "vol": -6.0},
 					{"do": "zone", "dur": 3.0, "tick": 0.5, "r": 260.0, "col": Color(0.4, 2.2, 2.0), "each": [
 						{"do": "damage", "on": "enemies", "at": "pos", "r": 260.0, "amt": [10, 18, 26, 34]},
 						{"do": "slow", "on": "enemies", "at": "pos", "r": 260.0, "pct": 0.4, "dur": 0.8}]}]},
 			"e": {"name": "潮汐祝福", "type": "passive", "max": 4, "passive": {"aura": {"id": "haste", "v": [0.04, 0.06, 0.08, 0.10], "r": 700.0}}},
 			"r": {"name": "惊涛骇浪", "type": "no_target", "max": 3, "ind": "self", "radius": 700.0,
-				"mana": [180, 230, 280], "cd": [100.0, 85.0, 70.0], "cast_point": 0.4,
+				"mana": [180, 230, 280], "cd": [100.0, 85.0, 70.0], "cast_point": 0.3,
 				"effects": [{"do": "heal", "on": "all_allies", "r": 700.0, "amt": [120, 200, 280]},
 					{"do": "buff", "on": "all_allies", "r": 700.0, "id": "haste", "v": 0.3, "dur": 4.0},
 					{"do": "damage", "on": "enemies", "at": "self", "r": 700.0, "amt": [60, 100, 140]},
@@ -342,8 +346,8 @@ const HEROES := {
 					{"do": "fx", "kind": "ring", "at": "self", "r": 700.0, "col": Color(0.4, 2.2, 2.0)},
 					{"do": "sfx", "name": "nova", "pitch": 1.4}, {"do": "shake", "v": 8.0}]},
 		},
-		"combo": "Q 涌泉奶住前排  →  W 漩涡拖住追击者  →  团战 R 惊涛骇浪加速全队、拖慢对手",
-		"ai_learn": ["q", "w", "e"],
+		"combo": "右键 涌泉奶住前排  →  Q 漩涡拖住追击者  →  团战 R 惊涛骇浪加速全队、拖慢对手",
+		"ai_learn": ["q", "e"],
 		"build": ["sage", "treads", "perseverance", "kaya", "aether", "octarine"],
 	},
 }

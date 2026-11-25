@@ -2,11 +2,11 @@ extends Node2D
 ## (moved out of main.gd)
 
 var cam_pos := Vector2.ZERO
+var half := Vector2(1000, 640)
 var pulse := 0.0
 var tint := Color(0.2, 0.4, 1.0)
 func _draw() -> void:
 	var step := 64.0
-	var half := Vector2(1000, 640)
 	var col := Color(tint.r, tint.g, tint.b, 0.16 + pulse * 0.3)
 	var x := floorf((cam_pos.x - half.x) / step) * step
 	while x < cam_pos.x + half.x:

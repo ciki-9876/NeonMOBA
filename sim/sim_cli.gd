@@ -19,6 +19,8 @@ extends SceneTree
 ##   --sig_a id,..    rounds: signature abilities for team A (applied to the matching hero)
 ##   --sig_b id,..
 ##   --map id         rounds: map (game/maps.gd), default core_pillars; core_open = no terrain
+##   --fixed_sides    rounds: team A always plays on the left side (default: A alternates sides by seed parity,
+##                    so map / side asymmetries cancel out; results are always reported from A's point of view)
 ##   --mirror         team B gets exactly team A's heroes (isolates player ability from the draft)
 ##   --ai_a k=v,...   tuning: override raw AI parameters of team A (react, dodge, aim_err, combo, aware_noise,
 ##                    obj_discipline, decide_err, follow, engage_delay), e.g. --ai_a dodge=0
@@ -40,12 +42,12 @@ var trace_every := 600
 func _initialize() -> void:
 	opt = {"mode": "rounds", "games": "10", "seed": "1", "a": ",,", "b": ",,", "diff": "1", "check": false, "out": "",
 		"attr_a": "11", "attr_b": "11", "set_a": "", "set_b": "", "prof_a": "60", "prof_b": "60",
-		"runes_a": "", "runes_b": "", "sig_a": "", "sig_b": "", "trace_every": "600", "quiet": false, "mirror": false, "ai_a": "", "ai_b": "", "map": "core_pillars"}
+		"runes_a": "", "runes_b": "", "sig_a": "", "sig_b": "", "trace_every": "600", "quiet": false, "mirror": false, "fixed_sides": false, "ai_a": "", "ai_b": "", "map": "core_pillars"}
 	var args := OS.get_cmdline_user_args()
 	var i := 0
 	while i < args.size():
 		var k: String = args[i].trim_prefix("--")
-		if k == "check" or k == "quiet" or k == "mirror":
+		if opt.has(k) and opt[k] is bool:
 			opt[k] = true
 		elif i + 1 < args.size():
 			opt[k] = args[i + 1]
@@ -163,9 +165,16 @@ func play(mseed: int) -> Dictionary:
 	if bool(opt["mirror"]):
 		b = a.duplicate()
 	var rounds_mode := str(opt["mode"]) == "rounds"
+	var swap: bool = rounds_mode and not bool(opt["fixed_sides"]) and mseed % 2 == 1
 	if rounds_mode:
-		gm._start_rounds(a, b, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
-			"profiles": [_profiles("a", a), _profiles("b", b)], "runes": [_runes("a", a), _runes("b", b)]})
+		var profs := [_profiles("a", a), _profiles("b", b)]
+		var runes := [_runes("a", a), _runes("b", b)]
+		if swap:
+			gm._start_rounds(b, a, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
+				"profiles": [profs[1], profs[0]], "runes": [runes[1], runes[0]]})
+		else:
+			gm._start_rounds(a, b, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
+				"profiles": profs, "runes": runes})
 	else:
 		gm._start_arena(a, b, int(opt["diff"]), mseed)
 		gm.set_autopilot(true)
@@ -200,4 +209,23 @@ func play(mseed: int) -> Dictionary:
 		w = 0 if gm.team_kills[0] > gm.team_kills[1] else 1
 	res["winner"] = w
 	res["trace"] = "\n".join(trace)
+	res["a_side"] = 1 if swap else 0
+	if swap:
+		_flip(res)
 	return res
+
+## report a side-swapped match from team A's point of view (A = team index 0 in every field)
+func _flip(res: Dictionary) -> void:
+	if int(res["winner"]) >= 0:
+		res["winner"] = 1 - int(res["winner"])
+	for k in ["kills", "score"]:
+		if res.has(k):
+			res[k] = [res[k][1], res[k][0]]
+	for h in res["heroes"]:
+		h["team"] = 1 - int(h["team"])
+	for rr in res.get("rounds", []):
+		if int(rr["winner"]) >= 0:
+			rr["winner"] = 1 - int(rr["winner"])
+		for k in ["kills", "alive", "capture", "lanes"]:
+			if rr.has(k):
+				rr[k] = [rr[k][1], rr[k][0]]

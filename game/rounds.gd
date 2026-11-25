@@ -24,7 +24,7 @@ const CORE_R := 230.0
 const CAPTURE_TIME := 8.0        # seconds of uncontested presence to fill the bar
 const SPAWN_R := 170.0           # heroes are held inside this radius during the buy phase
 const HERO_LEVEL := 12           # fixed hero level (no in-match levelling)
-const HP_MULT := 2.0             # hero max hp multiplier in round mode (fight length knob)
+const HP_MULT := 0.7             # hero max hp multiplier in round mode (fight length knob; 3C: 0.6 → half wipes, 0.8 → mostly captures)
 const START_GOLD := 3000.0
 const WIN_PAY := 2000.0
 const LOSS_PAY_BASE := 1500.0     # loss payout: 1500 / 2000 / 2500 / ... (+500 per consecutive loss)
@@ -114,6 +114,7 @@ func start_round() -> void:
 	phase_t = 0.0
 	capture = [0.0, 0.0]
 	var idx := [0, 0]
+	g.bolts.clear()
 	for h in g.heroes:
 		var p := spawn_pos(h.team, idx[h.team])
 		idx[h.team] += 1

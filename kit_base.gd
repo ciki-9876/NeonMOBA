@@ -41,7 +41,7 @@ func check(_s: String, _tgt) -> String:
 	return ""
 
 ## perform the skill effect at the end of the cast point
-func cast(_s: String, _tgt, _pos: Vector2) -> void:
+func cast(_s: String, _tgt, _pos: Vector2, _chg := 0.0) -> void:
 	pass
 
 ## called after any skill was cast

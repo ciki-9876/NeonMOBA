@@ -45,7 +45,7 @@ static func stage(p: Dictionary, hero_id: String) -> Array:
 
 ## how strongly ability differences show around an average player (11): calibration knob, see
 ## docs/design/核心对战规则与选手属性设计.md (target: +2 -> ~60% win rate, +5 -> ~80%)
-const SENSITIVITY := 1.2
+const SENSITIVITY := 0.35
 const AVERAGE := 11.0
 
 ## 0..1 effective ability on this hero: ((attr * stage multiplier) around AVERAGE, scaled by SENSITIVITY),

@@ -58,7 +58,7 @@ func est_damage(s: String) -> float:
 		"r": return float(slash_count()) * (h.atk_dmg() + h.sv("r", "bonus")) * 0.8 + ex * float(slash_count()) * 0.4
 	return 0.0
 
-func cast(s: String, tgt, pos: Vector2) -> void:
+func cast(s: String, tgt, pos: Vector2, _chg := 0.0) -> void:
 	match s:
 		"q": _cast_q(tgt, pos)
 		"w": _cast_w()

@@ -1,6 +1,6 @@
 extends "res://unit.gd"
-## A hero: attributes, levels, items, orders, the DOTA-style attack state machine.
-## Player input and the AI both drive heroes through the same order_* API.
+## A hero: attributes, levels, items, the virtual controller (3C: move / aim / fire / skills) and the attack state machine.
+## Player input and the AI both drive heroes through the same controller (ctl_* + press()).
 
 const ItemsDB = preload("res://items_db.gd")
 const HeroesDB = preload("res://heroes_db.gd")
@@ -128,6 +128,8 @@ func reset_full() -> void:
 	xp = 0.0
 	skill_points = 1
 	sk = {"q": 0, "w": 0, "e": 0, "r": 0, "attr": 0}
+	if is_c3():
+		sk["w"] = 1   # the right-click skill is never levelled: it is there from the start and scales with attributes
 	cds = {"q": 0.0, "w": 0.0, "e": 0.0, "r": 0.0}
 	inv = []
 	gold = 600.0
@@ -254,7 +256,8 @@ func recalc() -> void:
 		hp_frac = clampf(hp / max_hp, 0.0, 1.0)
 		mp_frac = clampf(mana / mana_max, 0.0, 1.0)
 	var b := {"str": 0.0, "agi": 0.0, "int": 0.0, "dmg": 0.0, "as": 0.0, "armor": 0.0, "ms": 0.0, "ms_pct": 0.0,
-		"hp": 0.0, "mana": 0.0, "hpr": 0.0, "mpr": 0.0, "ls": 0.0, "amp": 0.0, "cast": 0.0, "range": 0.0}
+		"hp": 0.0, "mana": 0.0, "hpr": 0.0, "mpr": 0.0, "ls": 0.0, "amp": 0.0, "cast": 0.0, "range": 0.0,
+		"pspd": 0.0, "vision": 0.0}
 	var mr_keep := 1.0
 	var eva_keep := 1.0
 	var cdr_keep := 1.0
@@ -321,7 +324,10 @@ func recalc() -> void:
 	n["amp"] = b["amp"] / 100.0
 	n["cdr"] = 1.0 - cdr_keep
 	n["cast"] = b["cast"]
-	n["range"] = float(def["range"]) + (0.0 if bool(def["melee"]) else b["range"])
+	# melee heroes get half of any attack range bonus (it widens the swing arc)
+	n["range"] = float(def["range"]) + b["range"] * (0.5 if bool(def["melee"]) else 1.0)
+	n["pspd"] = float(def.get("proj_speed", 1100.0)) + b["pspd"]
+	n["vision"] = float(def.get("vision", 900.0)) + b["vision"]
 	n["sp"] = spx
 	kit.stat_mods(n)
 	n["as"] = clampf(float(n["as"]), 20.0, 700.0)
@@ -347,8 +353,14 @@ func gain_xp(v: float) -> void:
 		recalc()
 		g.on_level_up(self)
 
+## heroes rebuilt for the 3C scheme (right-click signature skill in slot "w")
+func is_c3() -> bool:
+	return bool(def.get("c3", false))
+
 func can_learn(s: String) -> bool:
 	if skill_points <= 0:
+		return false
+	if s == "w" and is_c3():
 		return false
 	if s == "attr":
 		return int(sk["attr"]) < 10
@@ -403,79 +415,254 @@ func taunter():
 func valid(u) -> bool:
 	return u != null and is_instance_valid(u) and not u.dead
 
-# ============================================================ orders
-func busy() -> bool:
-	return dead or not dash.is_empty() or bool(kit.busy()) or has_buff("taunt") or has_buff("banish")
+# ============================================================ control (3C: WASD + mouse aim)
+## Every hero — player or AI — is driven through this virtual controller, written before each step:
+##   ctl_move  movement direction (length <= 1)          ctl_aim   world point the hero aims at
+##   ctl_fire  basic attack held                         ctl_hold  right-click (skill "w") held
+## press(s) asks for a skill toward ctl_aim. A skill with a "charge" block (normally the right-click)
+## starts charging on press and fires when ctl_hold is released.
+var ctl_move := Vector2.ZERO
+var ctl_aim := Vector2.ZERO
+var ctl_fire := false
+var ctl_hold := false
+var charging := ""
+var charge := 0.0
 
-func _cancel() -> void:
+func busy() -> bool:
+	return dead or not dash.is_empty() or bool(kit.busy()) or has_buff("banish")
+
+func casting() -> bool:
+	return cast_t >= 0.0
+
+func interrupt() -> void:
 	atk_phase = 0
 	cast_t = -1.0
-
-func order_move(p: Vector2) -> void:
-	if busy(): return
-	if cmd == C.MOVE:
-		cmd_pos = p
-		return
-	_cancel()
-	cmd = C.MOVE
-	cmd_pos = p
-	cmd_target = null
-
-func order_attack(u) -> void:
-	if busy() or not is_foe(u): return
-	if cmd == C.ATTACK and cmd_target == u:
-		return
-	if atk_phase == 1 and atk_target == u:
-		# already winding up an attack on this unit (e.g. from attack-move): keep it
-		cmd = C.ATTACK
-		cmd_target = u
-		return
-	_cancel()
-	cmd = C.ATTACK
-	cmd_target = u
-
-func order_amove(p: Vector2) -> void:
-	if busy(): return
-	if cmd == C.AMOVE:
-		cmd_pos = p
-		return
-	if atk_phase == 1:
-		# attack-move keeps the attack that is winding up (it would re-acquire a target anyway)
-		cmd = C.AMOVE
-		cmd_pos = p
-		return
-	_cancel()
-	cmd = C.AMOVE
-	cmd_pos = p
-
-func order_hold() -> void:
-	if busy(): return
-	_cancel()
-	cmd = C.HOLD
-
-func order_stop() -> void:
-	if busy(): return
-	_cancel()
+	charging = ""
+	charge = 0.0
 	cmd = C.IDLE
 
-func order_cast(s: String, tgt, p: Vector2) -> String:
-	if busy():
-		return "无法行动"
+## ally skills lock on the ally closest to the aim point (self when none in range);
+## legacy unit skills lock on the visible foe closest to the aim point
+func soft_target(s: String):
 	var typ: String = sdef[s]["type"]
-	if typ == "unit_or_point" and not is_foe(tgt):
-		tgt = null
-	if typ == "ally" and not is_ally(tgt):
-		tgt = self
+	var cr: float = float(kit.cast_range(s, null))
+	if cr <= 0.0:
+		cr = 99999.0
+	var best = null
+	var bd := 1e9
+	if typ == "ally":
+		for u in g.heroes:
+			if is_ally(u) and position.distance_to(u.position) <= cr + float(u.radius):
+				var dd: float = u.position.distance_to(ctl_aim)
+				if dd < bd:
+					bd = dd
+					best = u
+		return best if best != null else self
+	if typ == "unit":
+		for u in g.seen_foes(team, position, cr + 40.0):
+			if bool(u.is_hero) and g.has_los(position, u.position):
+				var dd2: float = u.position.distance_to(ctl_aim)
+				if dd2 < bd:
+					bd = dd2
+					best = u
+	return best
+
+func press(s: String) -> String:
+	if not sdef.has(s):
+		return ""
+	if busy() or stun > 0.0:
+		return "无法行动"
+	if casting() or charging != "":
+		return "正在施法"
+	var st: Dictionary = sdef[s]
+	var tgt = soft_target(s)
 	var err := cast_error(s, tgt)
 	if err != "":
 		return err
-	_cancel()
-	cmd = C.CAST
+	atk_phase = 0
+	if st.has("charge"):
+		charging = s
+		charge = 0.0
+		return ""
 	cast_skill = s
 	cast_target = tgt
-	cast_pos = p
-	cast_t = -1.0
+	cast_t = float(st.get("cast_point", 0.15))
+	cmd = C.CAST
 	return ""
+
+func charge_cfg() -> Dictionary:
+	return sdef[charging].get("charge", {}) if charging != "" else {}
+
+## target point of a cast: the aim, pulled in to the cast range for ground-targeted skills
+func cast_pos_for(s: String, aim: Vector2) -> Vector2:
+	var cr: float = float(kit.cast_range(s, null))
+	if cr > 0.0 and position.distance_to(aim) > cr:
+		return position + (aim - position).normalized() * cr
+	return aim
+
+func _finish_cast(s: String, tgt, aim: Vector2, chg: float) -> void:
+	cmd = C.IDLE
+	if s == "":
+		return
+	var typ: String = sdef[s]["type"]
+	var unit_cast: bool = typ in ["ally", "unit"]
+	if cast_error(s, tgt if unit_cast else null) != "":
+		return
+	var tpos := cast_pos_for(s, aim)
+	if unit_cast and tgt != null and is_instance_valid(tgt):
+		tpos = tgt.position
+	mana -= sv(s, "mana")
+	cds[s] = skill_cd(s)
+	g.reveal(self)
+	kit.cast(s, tgt if unit_cast else null, tpos, chg)
+	kit.on_cast(s)
+	g.on_hero_cast(self, s)
+
+func _update_charge(d: float) -> void:
+	if charging == "":
+		return
+	if silence > 0.0:
+		charging = ""
+		charge = 0.0
+		return
+	var cfg := charge_cfg()
+	charge = minf(1.0, charge + d / maxf(0.05, float(cfg.get("time", 1.0))))
+	if not ctl_hold:
+		var s := charging
+		var c := charge
+		charging = ""
+		charge = 0.0
+		if c >= float(cfg.get("min", 0.15)):
+			_finish_cast(s, soft_target(s), ctl_aim, c)
+
+func _control(d: float) -> void:
+	var tt = taunter()
+	var aim: Vector2 = tt.position if tt != null else ctl_aim
+	var to := aim - position
+	if to.length() > 2.0:
+		face = to.angle()
+	if cast_t >= 0.0:
+		cast_t -= d
+		if cast_t < 0.0:
+			cast_t = -1.0
+			_finish_cast(cast_skill, cast_target, aim, 0.0)
+		return
+	_update_charge(d)
+	var mv: Vector2 = ctl_move.limit_length(1.0)
+	if tt != null:
+		mv = Vector2.ZERO if to.length() < atk_range() * 0.8 + float(tt.radius) else to.normalized()
+	if mv.length() > 0.01 and not has_buff("root"):
+		var spd := move_speed()
+		if charging != "":
+			spd *= float(charge_cfg().get("move", 0.5))
+		position = g.clamp_pos(position + mv * spd * d, radius)
+	var want: bool = tt != null or (ctl_fire and charging == "")
+	_update_attack(d, aim, want)
+
+func _update_attack(d: float, aim: Vector2, want: bool) -> void:
+	match atk_phase:
+		0:
+			if want and atk_ready <= 0.0:
+				atk_phase = 1
+				atk_t = float(def["atk_point"]) / (1.0 + as_bonus())
+				atk_total = atk_t
+		1:
+			atk_t -= d
+			if atk_t <= 0.0:
+				_fire_attack(aim)
+				atk_phase = 2
+				atk_t = float(def["backswing"]) / (1.0 + as_bonus())
+				atk_bs_total = atk_t
+				atk_ready = atk_interval()
+		2:
+			atk_t -= d
+			if atk_t <= 0.0:
+				atk_phase = 0
+
+## melee: radius of the swing arc (= attack range) and its full angle in radians
+func melee_reach() -> float:
+	return atk_range()
+
+func melee_arc() -> float:
+	return deg_to_rad(float(def.get("arc", 100.0)))
+
+func proj_speed() -> float:
+	return float(ST.get("pspd", def.get("proj_speed", 1100.0)))
+
+## perception radius (AI) and camera height (player)
+func vision() -> float:
+	return float(ST.get("vision", def.get("vision", 900.0)))
+
+## ranged basic attacks fly up to 1.5x the attack range
+func bolt_reach() -> float:
+	return atk_range() * 1.5
+
+func _fire_attack(_aim: Vector2) -> void:
+	recoil = 7.0
+	g.reveal(self)
+	var info := {"proc": false, "bonus": 0.0, "ls": 0.0}
+	kit.on_attack_fire(null, info)
+	var dmg: float = atk_dmg() * g.rng.randf_range(0.95, 1.05)
+	var dir := Vector2.from_angle(face)
+	stat_add("atk_fired")
+	if bool(def["melee"]):
+		var hits: Array = g.foes_in_arc(team, position, dir, melee_reach(), melee_arc())
+		var hit_hero := false
+		for u in hits:
+			attack_hit(u, dmg, info)
+			if bool(u.is_hero):
+				hit_hero = true
+		if hit_hero:
+			stat_add("atk_hit")
+		g.swing_fx(self, dir, bool(info.get("proc", false)) or float(info["bonus"]) > 0.0)
+	else:
+		g.spawn_bolt(self, position + dir * (radius + 8.0), dir, dmg, info)
+
+func attack_hit(tgt, base: float, info: Dictionary) -> void:
+	if not valid(tgt):
+		return
+	var spx := sp()
+	var dmg: float = base + float(info.get("bonus", 0.0))
+	var kind := "attack"
+	var crit: Array = spx.get("crit", [0.0, 1.0])
+	if float(crit[0]) > 0.0 and g.rng.randf() < float(crit[0]):
+		dmg *= float(crit[1])
+		kind = "crit"
+	var dir: Vector2 = (tgt.position - position).normalized()
+	var dealt: float = g.damage(self, tgt, dmg, kind, "phys", dir * 0.3, true)
+	if dealt <= 0.0:
+		return
+	var ls: float = float(ST.get("ls", 0.0)) + float(info.get("ls", 0.0))
+	if ls > 0.0:
+		hp = minf(max_hp, hp + dealt * ls)
+	if not tgt.dead:
+		if float(spx.get("deso", 0.0)) > 0.0:
+			tgt.deso_t = 7.0
+			tgt.deso_v = float(spx["deso"])
+		var skd: Array = spx.get("skadi", [])
+		if not skd.is_empty():
+			tgt.slow = maxf(tgt.slow, float(skd[1]))
+			tgt.slow_pct = float(skd[0])
+		var mkb: Array = spx.get("mkb", [])
+		if not mkb.is_empty() and g.rng.randf() < float(mkb[0]):
+			g.damage(self, tgt, float(mkb[1]), "proc", "magic")
+	var ch: Array = spx.get("chain", [])
+	if not ch.is_empty() and g.rng.randf() < float(ch[0]):
+		g.item_chain(self, tgt, int(ch[1]), float(ch[2]))
+	kit.on_attack_hit(tgt, info)
+
+## next point to walk toward on the way to p: straight when the line is clear, otherwise the path
+func steer_point(p: Vector2) -> Vector2:
+	if g.terrain == null or not g.terrain.seg_blocked(position, p, radius):
+		_path = PackedVector2Array()
+		return p
+	if _path.is_empty() or _path_goal.distance_to(p) > 48.0 or g.t - _path_t > 0.8:
+		_path = g.terrain.path(position, p, radius + 2.0)
+		_path_goal = p
+		_path_t = g.t
+	while _path.size() > 1 and (position.distance_to(_path[0]) < 14.0 or not g.terrain.seg_blocked(position, _path[1], radius)):
+		_path.remove_at(0)
+	return _path[0] if not _path.is_empty() else p
 
 # ============================================================ update
 func update(d: float) -> void:
@@ -517,205 +704,14 @@ func update(d: float) -> void:
 	elif kit.busy():
 		pass
 	elif stun > 0.0 or has_buff("banish"):
-		atk_phase = 0
-		cast_t = -1.0
-	elif taunter() != null:
-		var tt = taunter()
-		if cmd != C.ATTACK or cmd_target != tt:
-			_cancel()
-			cmd = C.ATTACK
-			cmd_target = tt
-		_update_attack(d)
-		_attack_logic(tt, d, true)
+		interrupt()
 	else:
-		_update_attack(d)
-		_update_cmd(d)
+		_control(d)
 	vel = (position - _prev_pos) / maxf(d, 0.0001)
 	_visuals(d)
 
-func _update_attack(d: float) -> void:
-	if atk_phase == 1:
-		if not is_foe(atk_target):
-			atk_phase = 0
-		else:
-			_turn_to((atk_target.position - position).angle(), d)
-			atk_t -= d
-			if atk_t <= 0.0:
-				_fire_attack(atk_target)
-				atk_phase = 2
-				atk_t = float(def["backswing"]) / (1.0 + as_bonus())
-				atk_bs_total = atk_t
-				atk_ready = atk_interval()
-	elif atk_phase == 2:
-		atk_t -= d
-		if atk_t <= 0.0:
-			atk_phase = 0
-
-func _update_cmd(d: float) -> void:
-	match cmd:
-		C.MOVE:
-			if atk_phase == 0 and _move_to(cmd_pos, d):
-				cmd = C.IDLE
-		C.ATTACK:
-			if not is_foe(cmd_target):
-				cmd = C.IDLE
-			else:
-				_attack_logic(cmd_target, d, true)
-		C.AMOVE:
-			var tgt = g.nearest_foe(team, position, atk_range() + 160.0)
-			if tgt != null:
-				_attack_logic(tgt, d, true)
-			elif atk_phase == 0 and _move_to(cmd_pos, d):
-				cmd = C.IDLE
-		C.HOLD:
-			var tgt2 = g.nearest_foe(team, position, atk_range())
-			if tgt2 != null:
-				_attack_logic(tgt2, d, false)
-		C.IDLE:
-			var tgt3 = g.nearest_foe(team, position, atk_range() + (0.0 if is_player else 200.0))
-			if tgt3 != null:
-				_attack_logic(tgt3, d, not is_player)
-		C.CAST:
-			_cast_logic(d)
-
-func _turn_to(ang: float, d: float) -> bool:
-	face = rotate_toward(face, ang, float(def["turn"]) * d)
-	return absf(angle_difference(face, ang)) < 0.2
-
-## next point to walk toward on the way to p: straight when the line is clear, otherwise the path
-func _steer_point(p: Vector2) -> Vector2:
-	if g.terrain == null or not g.terrain.seg_blocked(position, p, radius):
-		_path = PackedVector2Array()
-		return p
-	if _path.is_empty() or _path_goal.distance_to(p) > 48.0 or g.t - _path_t > 0.8:
-		_path = g.terrain.path(position, p, radius + 2.0)
-		_path_goal = p
-		_path_t = g.t
-	while _path.size() > 1 and (position.distance_to(_path[0]) < 14.0 or not g.terrain.seg_blocked(position, _path[1], radius)):
-		_path.remove_at(0)
-	return _path[0] if not _path.is_empty() else p
-
-func _move_to(p: Vector2, d: float) -> bool:
-	if (p - position).length() < 8.0:
-		return true
-	var to := _steer_point(p) - position
-	if has_buff("root"):
-		_turn_to(to.angle(), d)
-		return false
-	if to.length() < 8.0:
-		return true
-	var ok := _turn_to(to.angle(), d)
-	if ok or absf(angle_difference(face, to.angle())) < 0.5:
-		var step := to.normalized() * minf(move_speed() * d, to.length())
-		var np: Vector2 = g.clamp_pos(position + step, radius)
-		if np.distance_to(position) < 0.01 and step.length() > 0.5:
-			return true
-		position = np
-	return false
-
-func _attack_logic(tgt, d: float, chase: bool) -> void:
-	if atk_phase != 0:
-		return
-	var dist: float = position.distance_to(tgt.position) - float(tgt.radius)
-	if dist > atk_range() or not g.has_los(position, tgt.position):
-		if chase:
-			_move_to(tgt.position, d)
-		return
-	if _turn_to((tgt.position - position).angle(), d) and atk_ready <= 0.0:
-		atk_phase = 1
-		atk_t = float(def["atk_point"]) / (1.0 + as_bonus())
-		atk_total = atk_t
-		atk_target = tgt
-
-func _fire_attack(tgt) -> void:
-	recoil = 7.0
-	g.reveal(self)
-	var info := {"proc": false, "bonus": 0.0, "ls": 0.0}
-	kit.on_attack_fire(tgt, info)
-	var dmg: float = atk_dmg() * g.rng.randf_range(0.95, 1.05)
-	if bool(def["melee"]):
-		if position.distance_to(tgt.position) - float(tgt.radius) <= atk_range() + 350.0:
-			attack_hit(tgt, dmg, info)
-		g.slash_fx(self, tgt, bool(info.get("proc", false)) or float(info["bonus"]) > 0.0)
-	else:
-		g.spawn_hero_shot(self, tgt, dmg, info)
-
-func attack_hit(tgt, base: float, info: Dictionary) -> void:
-	if not valid(tgt):
-		return
-	var spx := sp()
-	var dmg: float = base + float(info.get("bonus", 0.0))
-	var kind := "attack"
-	var crit: Array = spx.get("crit", [0.0, 1.0])
-	if float(crit[0]) > 0.0 and g.rng.randf() < float(crit[0]):
-		dmg *= float(crit[1])
-		kind = "crit"
-	var dir: Vector2 = (tgt.position - position).normalized()
-	var dealt: float = g.damage(self, tgt, dmg, kind, "phys", dir * 0.3, true)
-	if dealt <= 0.0:
-		return
-	var ls: float = float(ST.get("ls", 0.0)) + float(info.get("ls", 0.0))
-	if ls > 0.0:
-		hp = minf(max_hp, hp + dealt * ls)
-	if not tgt.dead:
-		if float(spx.get("deso", 0.0)) > 0.0:
-			tgt.deso_t = 7.0
-			tgt.deso_v = float(spx["deso"])
-		var skd: Array = spx.get("skadi", [])
-		if not skd.is_empty():
-			tgt.slow = maxf(tgt.slow, float(skd[1]))
-			tgt.slow_pct = float(skd[0])
-		var mkb: Array = spx.get("mkb", [])
-		if not mkb.is_empty() and g.rng.randf() < float(mkb[0]):
-			g.damage(self, tgt, float(mkb[1]), "proc", "magic")
-	var ch: Array = spx.get("chain", [])
-	if not ch.is_empty() and g.rng.randf() < float(ch[0]):
-		g.item_chain(self, tgt, int(ch[1]), float(ch[2]))
-	kit.on_attack_hit(tgt, info)
-
-func _cast_logic(d: float) -> void:
-	var s := cast_skill
-	if cast_error(s, cast_target) != "":
-		cmd = C.IDLE
-		return
-	var typ: String = sdef[s]["type"]
-	var tpos := cast_pos
-	var unit_cast: bool = typ == "unit" or typ == "ally" or (typ == "unit_or_point" and cast_target != null)
-	if unit_cast:
-		var ok: bool = is_ally(cast_target) if typ == "ally" else is_foe(cast_target)
-		if not ok:
-			cmd = C.IDLE
-			return
-		tpos = cast_target.position
-	if typ != "no_target":
-		var cr: float = float(kit.cast_range(s, cast_target if unit_cast else null))
-		var slack: float = float(cast_target.radius) if unit_cast else 0.0
-		if cr > 0.0 and position.distance_to(tpos) > cr + slack:
-			_move_to(tpos, d)
-			cast_t = -1.0
-			return
-		var ang := (tpos - position).angle()
-		if cast_t < 0.0:
-			if position.distance_to(tpos) < 4.0 or _turn_to(ang, d):
-				cast_t = float(sdef[s].get("cast_point", 0.25))
-			return
-		_turn_to(ang, d)
-	elif cast_t < 0.0:
-		cast_t = float(sdef[s].get("cast_point", 0.0))
-	cast_t -= d
-	if cast_t > 0.0:
-		return
-	cast_t = -1.0
-	mana -= sv(s, "mana")
-	cds[s] = skill_cd(s)
-	cmd = C.IDLE
-	g.reveal(self)
-	kit.cast(s, cast_target if unit_cast else null, tpos)
-	kit.on_cast(s)
-	g.on_hero_cast(self, s)
-
 func cast_point_total() -> float:
-	return float(sdef[cast_skill].get("cast_point", 0.25)) if cast_skill != "" else 0.25
+	return float(sdef[cast_skill].get("cast_point", 0.15)) if cast_skill != "" else 0.15
 
 # ============================================================ dash (used by kits)
 func start_dash(to: Vector2, speed: float, cb: Callable) -> void:
@@ -725,6 +721,7 @@ func start_dash(to: Vector2, speed: float, cb: Callable) -> void:
 	dash = {"to": dest, "speed": speed, "cb": cb}
 	atk_phase = 0
 	cast_t = -1.0
+	cmd = C.IDLE
 
 func _do_dash(d: float) -> void:
 	var to: Vector2 = dash["to"]
@@ -747,8 +744,7 @@ func die() -> void:
 	barrier = 0.0
 	dead = true
 	visible = false
-	atk_phase = 0
-	cmd = C.IDLE
+	interrupt()
 	dash = {}
 	trail.clear_points()
 
@@ -765,17 +761,19 @@ func log_damage(src) -> void:
 func _visuals(d: float) -> void:
 	spr.rotation = face
 	var fdir := Vector2.from_angle(face)
-	var charge := 0.0
+	var glow := 0.0
 	if atk_phase == 1:
-		charge = clampf(1.0 - atk_t / maxf(atk_total, 0.01), 0.0, 1.0)
-	elif cmd == C.CAST and cast_t > 0.0:
-		charge = clampf(1.0 - cast_t / maxf(cast_point_total(), 0.01), 0.0, 1.0)
+		glow = clampf(1.0 - atk_t / maxf(atk_total, 0.01), 0.0, 1.0)
+	elif cast_t > 0.0:
+		glow = clampf(1.0 - cast_t / maxf(cast_point_total(), 0.01), 0.0, 1.0)
+	elif charging != "":
+		glow = charge
 	recoil = move_toward(recoil, 0.0, 40.0 * d)
-	spr.position = -fdir * (charge * 4.0 + recoil)
+	spr.position = -fdir * (glow * 4.0 + recoil)
 	var base := Color(1.5, 1.5, 1.5)
 	if not is_player and team == 1:
 		base = Color(1.9, 1.1, 1.1)
-	var col: Color = base.lerp(Color(2.2, 2.7, 2.9), charge)
+	var col: Color = base.lerp(Color(2.2, 2.7, 2.9), glow)
 	if flash > 0.0:
 		col = Color(2.6, 2.6, 2.6)
 	if invuln > 0.0:

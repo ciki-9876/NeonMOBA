@@ -173,7 +173,8 @@ func _build_ui() -> void:
 	points_lbl.position = Vector2(0, 74)
 	points_lbl.size = Vector2(80, 20)
 	root.add_child(points_lbl)
-	var keys := ["q", "w", "e", "r"]
+	# 3C order on screen: right-click signature skill first, then Q E R (the right-click lives in slot "w")
+	var keys := ["w", "q", "e", "r"]
 	for i in 4:
 		_make_slot(root, keys[i], Vector2(92 + i * 112, 22), 72)
 	_make_slot(root, "attr", Vector2(560, 34), 48)
@@ -270,7 +271,7 @@ func _make_slot(root: Control, key: String, pos: Vector2, size: float) -> void:
 	cdl.size = Vector2(size, size)
 	box.add_child(cdl)
 	var kl := _label(14, Color(1, 1, 1, 0.9))
-	kl.text = key.to_upper() if key != "attr" else ""
+	kl.text = ("右键" if key == "w" else key.to_upper()) if key != "attr" else ""
 	kl.position = Vector2(3, 0)
 	box.add_child(kl)
 	var ml := _label(12, Color(0.5, 0.7, 1.0), HORIZONTAL_ALIGNMENT_RIGHT)
