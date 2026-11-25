@@ -11,9 +11,6 @@ const HeroAI = preload("res://hero_ai.gd")
 const TeamAI = preload("res://team_ai.gd")
 const HeroesDB = preload("res://heroes_db.gd")
 const ItemsDB = preload("res://items_db.gd")
-const Enemy = preload("res://game/enemy.gd")
-const HeroShot = preload("res://game/hero_shot.gd")
-const EShot = preload("res://game/enemy_shot.gd")
 const Grid = preload("res://view/grid.gd")
 const Ring = preload("res://view/ring.gd")
 
@@ -80,9 +77,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 			else: shp._open_shop()
 			return
 		if k == KEY_TAB:
-			if gm.mode != C.M.SURVIVAL:
-				hd.board.visible = not hd.board.visible
-				hd._update_board()
+			hd.board.visible = not hd.board.visible
+			hd._update_board()
 			return
 		if k == KEY_C:
 			hd.stats_panel.visible = not hd.stats_panel.visible
@@ -106,15 +102,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 			hd.toast("测试免疫伤害：%s" % ("开" if gm.god else "关"), Color(1, 1, 0.5), 2.0)
 		elif k == KEY_F7 and OS.is_debug_build():
 			gm.player.gold += 3000.0  # dev shortcut: +3000 gold
-		elif k == KEY_F8 and OS.is_debug_build() and gm.mode == C.M.SURVIVAL:
-			gm._spawn_boss(clampi(gm.bosses.size() + 1, 1, 3))  # dev shortcut: summon a boss
-		elif k == KEY_F9 and OS.is_debug_build():
-			gm.t += 60.0  # dev shortcut: fast-forward one minute (skips scheduled events)
-			while gm.event_i < C.EVENTS.size() and C.EVENTS[gm.event_i][0] <= gm.t:
-				gm.event_i += 1
-			gm.next_rune = maxf(gm.next_rune, gm.t + 5.0)
-			for h in gm.heroes:
-				h.gain_xp(h.xp_need())
+
 	elif ev is InputEventMouseButton:
 		if gm.state != C.S.PLAY or gm.paused or shp.shop_open or gm.player == null or gm.autopilot:
 			return
@@ -134,12 +122,6 @@ func _press(s: String) -> void:
 func _unit_at(p: Vector2, foes_only: bool):
 	var best_u = null
 	var bd := 1e9
-	for e in gm.enemies:
-		if not e.targetable(): continue
-		var d: float = p.distance_to(e.position)
-		if d < e.radius + 14.0 and d < bd:
-			bd = d
-			best_u = e
 	for h in gm.heroes:
 		if h.dead or h == gm.player: continue
 		if foes_only and (h.team == gm.player.team or not h.targetable()): continue

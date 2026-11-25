@@ -1,5 +1,6 @@
 extends "res://kit_base.gd"
-## 霓虹漂移者 — Q 脉冲射线 / W 相位闪烁 / E 超载 / R 奇点
+## 霓虹漂移者 (3C) — 右键 脉冲射线（蓄力）/ Q 相位闪烁 / E 超载 / R 奇点
+## Slot keys: "w" = right-click beam (never levelled, scales with agility and charge), "q" = blink.
 
 var attack_count := 0
 var empowered := false
@@ -34,19 +35,19 @@ func r_radius() -> float:
 	return float(h.sdef["r"]["radius"]) + (100.0 if h.has_scepter() else 0.0)
 
 func blink_dist() -> float:
-	return h.sv("w", "dist") + float(h.ST.get("cast", 0.0))
+	return h.sv("q", "dist") + float(h.ST.get("cast", 0.0))
 
 func est_damage(s: String) -> float:
 	match s:
-		"q": return h.sv("q", "dmg")
-		"w": return h.sv("w", "nova") + h.sv("w", "det")
+		"w": return sval("w", "dmg", 1.0)
+		"q": return h.sv("q", "nova") + h.sv("q", "det")
 		"r": return h.sv("r", "burst") + h.sv("r", "dps") * 3.0
 	return 0.0
 
-func cast(s: String, _tgt, pos: Vector2, _chg := 0.0) -> void:
+func cast(s: String, _tgt, pos: Vector2, chg := 0.0) -> void:
 	match s:
-		"q": _cast_q(pos)
-		"w": _cast_w(pos)
+		"w": _cast_beam(pos, chg)
+		"q": _cast_blink(pos)
 		"r": _cast_r(pos)
 
 func on_cast(_s: String) -> void:
@@ -63,24 +64,29 @@ func on_attack_hit(tgt, info: Dictionary) -> void:
 	if bool(info.get("proc", false)) and int(h.sk["e"]) > 0:
 		_chain(tgt)
 
-# ------------------------------------------------------------ Q
-func _cast_q(p: Vector2) -> void:
+# ------------------------------------------------------------ right-click: 脉冲射线 (charge)
+func _cast_beam(p: Vector2, chg: float) -> void:
 	var dir: Vector2 = (p - h.position).normalized()
 	if dir == Vector2.ZERO:
 		dir = Vector2.from_angle(h.face)
 	var hit := {}
 	if h.shard_owned:
 		for ang in [-0.28, 0.0, 0.28]:
-			_q_beam(dir.rotated(ang), hit)
+			_beam(dir.rotated(ang), hit, chg)
 	else:
-		_q_beam(dir, hit)
+		_beam(dir, hit, chg)
 
-func _q_beam(dir: Vector2, hit: Dictionary) -> void:
+func _beam(dir: Vector2, hit: Dictionary, chg: float) -> void:
 	var a: Vector2 = h.position
-	var qlen: float = float(h.sdef["q"]["range"])
+	var qlen: float = sval("w", "len", chg)
 	var b: Vector2 = a + dir * qlen
-	var w: float = float(h.sdef["q"]["width"])
-	var dmg: float = h.sv("q", "dmg")
+	if g.terrain != null:
+		b = g.terrain.sweep(a, b, 1.0)   # the beam stops at walls and pillars
+		qlen = a.distance_to(b)
+	var w: float = float(h.sdef["w"]["width"]) * lerpf(0.8, 1.3, chg)
+	var dmg: float = sval("w", "dmg", chg)
+	h.stat_add("shot_fired")
+	var any := false
 	for e in g.foes_all(h.team):
 		var rel: Vector2 = e.position - a
 		var tp: float = clampf(rel.dot(dir), 0.0, qlen)
@@ -89,12 +95,15 @@ func _q_beam(dir: Vector2, hit: Dictionary) -> void:
 			hit[e] = true
 			e.charged = 5.0
 			g.damage(h, e, dmg, "skill", "magic", dir * 0.5)
-	g.beam_fx(a, b, Color(0.4, 2.2, 2.6))
+			if bool(e.is_hero) and not any:
+				any = true
+				h.stat_add("shot_hit")
+	g.beam_fx(a, b, Color(0.4, 2.2, 2.6) if chg < 1.0 else Color(2.6, 2.6, 0.8), 1.0 + 0.6 * chg)
 	g.sfx("lance")
 	g.add_shake(5.0, h)
 
-# ------------------------------------------------------------ W
-func _cast_w(p: Vector2) -> void:
+# ------------------------------------------------------------ Q: 相位闪烁
+func _cast_blink(p: Vector2) -> void:
 	var to: Vector2 = p - h.position
 	var dest: Vector2 = g.clamp_pos(h.position + to.limit_length(blink_dist()), h.radius)
 	g.ghost(h, h.position, Color(2.0, 0.4, 1.8, 0.7))
@@ -102,10 +111,10 @@ func _cast_w(p: Vector2) -> void:
 	h.position = dest
 	h.trail.clear_points()
 	g.sfx("blink")
-	var r: float = float(h.sdef["w"]["radius"])
-	var nova: float = h.sv("w", "nova")
-	var det: float = h.sv("w", "det")
-	var stun: float = h.sv("w", "stun")
+	var r: float = float(h.sdef["q"]["radius"])
+	var nova: float = h.sv("q", "nova")
+	var det: float = h.sv("q", "det")
+	var stun: float = h.sv("q", "stun")
 	var detonated := 0
 	for e in g.foes_in(h.team, dest, r):
 		var dmg := nova
@@ -148,7 +157,6 @@ func tick_world(d: float) -> void:
 			var dist: float = to.length()
 			var k := 1.0
 			if bool(e.boss): k = 0.08
-			elif e.kind == "colossus": k = 0.4
 			elif bool(e.is_hero): k = 0.3
 			e.pull = to.normalized() * minf(480.0, dist * 5.0) * k
 			if dist < r + float(e.radius):
@@ -212,7 +220,7 @@ func _chain(first) -> void:
 		var was_alive: bool = not cur.dead
 		g.damage(h, cur, amount, "chain", "magic")
 		if was_alive and cur.dead:
-			h.cds["w"] = maxf(0.0, float(h.cds["w"]) - 1.0)
+			h.cds["q"] = maxf(0.0, float(h.cds["q"]) - 1.0)
 		prev = cur.position
 		var nxt = null
 		var bd := 320.0

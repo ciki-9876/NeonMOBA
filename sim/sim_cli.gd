@@ -2,12 +2,11 @@ extends SceneTree
 ## Headless batch simulator (no window, no audio, no UI). Every hero is AI controlled.
 ##
 ## godot --headless --script res://sim/sim_cli.gd -- [options]
-##   --mode M         rounds (default, the stage 1 core mode) | arena (old kill-race mode)
 ##   --games N        number of matches (default 10)
 ##   --seed S         first seed; match i uses S + i (default 1)
 ##   --a ids          team A heroes, comma separated; empty slot = random by role (default random)
 ##   --b ids          team B heroes
-##   --diff D         AI difficulty 0-2 for the old arena mode (default 1)
+##   --diff D         AI difficulty 0-2 (only used when no player profiles are given; default 1)
 ##   --attr_a V       rounds: every ability of team A's players = V (1..20, default 11)
 ##   --attr_b V       rounds: same for team B
 ##   --set_a k=v,...  rounds: override single abilities of team A, e.g. reaction=18,mechanics=6
@@ -164,23 +163,18 @@ func play(mseed: int) -> Dictionary:
 	gm._fill_random(b)
 	if bool(opt["mirror"]):
 		b = a.duplicate()
-	var rounds_mode := str(opt["mode"]) == "rounds"
-	var swap: bool = rounds_mode and not bool(opt["fixed_sides"]) and mseed % 2 == 1
-	if rounds_mode:
-		var profs := [_profiles("a", a), _profiles("b", b)]
-		var runes := [_runes("a", a), _runes("b", b)]
-		if swap:
-			gm._start_rounds(b, a, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
-				"profiles": [profs[1], profs[0]], "runes": [runes[1], runes[0]]})
-		else:
-			gm._start_rounds(a, b, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
-				"profiles": profs, "runes": runes})
+	var swap: bool = not bool(opt["fixed_sides"]) and mseed % 2 == 1
+	var profs := [_profiles("a", a), _profiles("b", b)]
+	var runes := [_runes("a", a), _runes("b", b)]
+	if swap:
+		gm._start_rounds(b, a, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
+			"profiles": [profs[1], profs[0]], "runes": [runes[1], runes[0]]})
 	else:
-		gm._start_arena(a, b, int(opt["diff"]), mseed)
-		gm.set_autopilot(true)
+		gm._start_rounds(a, b, int(opt["diff"]), mseed, {"human": false, "map": str(opt["map"]),
+			"profiles": profs, "runes": runes})
 	var trace := PackedStringArray()
 	var steps := 0
-	var max_steps := int(((C.ARENA_LEN + 30.0) if not rounds_mode else 1500.0) / MatchT.DT)
+	var max_steps := int(1500.0 / MatchT.DT)
 	var last_k := [0, 0]
 	while gm.state == C.S.PLAY and steps < max_steps:
 		gm.step(MatchT.DT)
@@ -198,15 +192,12 @@ func play(mseed: int) -> Dictionary:
 			"items": h.inv.duplicate(), "stats": h.stats.duplicate()})
 	var w := -1
 	var res := {"seed": mseed, "a": a, "b": b, "kills": gm.team_kills.duplicate(), "time": snappedf(gm.t, 0.1), "heroes": heroes}
-	if rounds_mode:
-		var r = gm.rounds
-		if r.score[0] != r.score[1]:
-			w = 0 if r.score[0] > r.score[1] else 1
-		res["score"] = r.score.duplicate()
-		res["rounds_played"] = r.history.size()
-		res["rounds"] = r.history.duplicate()
-	elif gm.team_kills[0] != gm.team_kills[1]:
-		w = 0 if gm.team_kills[0] > gm.team_kills[1] else 1
+	var r = gm.rounds
+	if r.score[0] != r.score[1]:
+		w = 0 if r.score[0] > r.score[1] else 1
+	res["score"] = r.score.duplicate()
+	res["rounds_played"] = r.history.size()
+	res["rounds"] = r.history.duplicate()
 	res["winner"] = w
 	res["trace"] = "\n".join(trace)
 	res["a_side"] = 1 if swap else 0

@@ -344,7 +344,7 @@ func _update_retreat(hpf: float, foe_heroes: Array, brain) -> void:
 			if (near == 0 or urgent) and team_ok:
 				retreating = false
 			return
-		if (hpf > 0.85 or (near == 0 and hpf > 0.55 and not g.near_home(h))) and team_ok:
+		if (hpf > 0.85 or (near == 0 and hpf > 0.55)) and team_ok:
 			retreating = false
 		return
 	var limit := 0.18 / greed
@@ -532,8 +532,6 @@ func _pick_target(foes: Array, brain):
 			s -= 70.0
 		if u == target:
 			s += 30.0
-		if g.in_enemy_fountain(u.position, h.team):
-			s -= 400.0
 		if aware_noise > 0.0:
 			s += _roll_n(u, aware_noise, 2.5)
 		if s > bs:
@@ -677,10 +675,6 @@ func _attack(t, foe_heroes: Array, brain) -> void:
 	_engage(t)
 
 func _roam(brain) -> void:
-	var rp = g.nearest_rune(h.position, 700.0)
-	if rp != null and (brain == null or brain.intent != "retreat"):
-		_move(rp)
-		return
 	if brain != null and _roll("lone", 3.0) < lone:
 		# poor teamwork: wanders toward the enemy instead of holding the formation
 		var e2 = g.nearest_foe_hero(h.team, h.position)

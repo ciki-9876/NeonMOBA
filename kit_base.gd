@@ -36,6 +36,31 @@ func cast_range(s: String, _tgt) -> float:
 	var r: float = float(h.sdef[s].get("range", 0.0))
 	return r + float(h.ST.get("cast", 0.0)) if r > 0.0 else 0.0
 
+## a skill value: a number, a per-level array, or a scaling dict {"v", "str"/"agi"/"int"/"atk"/"hp": k,
+## "charge": [x at no charge, x at full charge]} (same format as kit_data.gd); chg = charge 0..1
+func sval(s: String, key: String, chg := 0.0) -> float:
+	return scaled(h.sdef[s].get(key, 0.0), maxi(1, int(h.sk.get(s, 1))), chg)
+
+func scaled(p, lv: int, chg := 0.0) -> float:
+	if p is Dictionary:
+		var dct: Dictionary = p
+		var v: float = scaled(dct.get("v", 0.0), lv)
+		for a in ["str", "agi", "int"]:
+			if dct.has(a):
+				v += float(dct[a]) * float(h.ST.get(a, 0.0))
+		if dct.has("atk"):
+			v += float(dct["atk"]) * h.atk_dmg()
+		if dct.has("hp"):
+			v += float(dct["hp"]) * h.max_hp
+		if dct.has("charge"):
+			var cm: Array = dct["charge"]
+			v *= lerpf(float(cm[0]), float(cm[1]), chg)
+		return v
+	if p is Array:
+		var arr: Array = p
+		return float(arr[clampi(lv, 1, arr.size()) - 1]) if not arr.is_empty() else 0.0
+	return float(p)
+
 ## extra validation; return an error text or ""
 func check(_s: String, _tgt) -> String:
 	return ""

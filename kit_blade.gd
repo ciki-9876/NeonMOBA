@@ -1,12 +1,12 @@
 extends "res://kit_base.gd"
-## 绯刃 — Q 瞬影斩 / W 血誓 / E 处决 / R 千刃·剑舞
-## Combo: Q marks → attacks/slashes on a marked target trigger E (處決) → R slashes alternate mark / execute.
+## 绯刃 (3C) — 右键 瞬影斩 / Q 血誓 / E 处决 / R 千刃·剑舞
+## Slot keys: "w" = right-click dash (never levelled, scales with strength), "q" = 血誓.
+## Combo: dash marks → swings on marked targets trigger E (处决) → R slashes alternate mark / execute.
 
 const SLASH_COL := Color(2.6, 0.45, 0.55)
 
 var oath_n := 0
 var oath_t := 0.0
-var q_follow = null
 var q_from := Vector2.ZERO
 var r_left := 0
 var r_t := 0.0
@@ -20,7 +20,6 @@ func reset() -> void:
 	oath_t = 0.0
 	r_left = 0
 	r_target = null
-	q_follow = null
 
 func round_reset() -> void:
 	reset()
@@ -32,18 +31,31 @@ func busy() -> bool:
 func cd_reduction(s: String) -> float:
 	return 15.0 if s == "r" and h.has_scepter() else 0.0
 
-func cast_range(s: String, tgt) -> float:
-	var cast_bonus: float = float(h.ST.get("cast", 0.0))
-	if s == "q":
-		return (h.sv("q", "dist") + cast_bonus) if tgt != null else 0.0
+func cast_range(s: String, _tgt) -> float:
 	if s == "r":
-		return float(h.sdef["r"]["range"]) + cast_bonus
+		return float(h.sdef["r"]["range"]) + float(h.ST.get("cast", 0.0))
 	return 0.0
+
+## R needs somebody to slash near the aim point
+func check(s: String, _tgt) -> String:
+	if s == "r" and _r_first_target(h.cast_pos_for("r", h.ctl_aim)) == null:
+		return "附近没有对手"
+	return ""
+
+func _r_first_target(p: Vector2):
+	var best = null
+	var bd := 1e9
+	for u in g.seen_foes(h.team, h.position, float(h.sdef["r"]["jump"])):
+		var dd: float = u.position.distance_to(p) - (0.0 if bool(u.is_hero) else -200.0)
+		if dd < bd:
+			bd = dd
+			best = u
+	return best
 
 func skill_radius(s: String) -> float:
 	if s == "r":
 		return float(h.sdef["r"]["jump"])
-	if s == "w":
+	if s == "q":
 		return h.atk_range() + 40.0
 	return float(h.sdef[s].get("radius", 0.0))
 
@@ -53,30 +65,25 @@ func slash_count() -> int:
 func est_damage(s: String) -> float:
 	var ex: float = h.sv("e", "flat")
 	match s:
-		"q": return h.sv("q", "dmg") + ex * 0.8
-		"w": return h.sv("w", "bonus") * 3.0
+		"w": return sval("w", "dmg") + ex * 0.8
+		"q": return h.sv("q", "bonus") * 3.0
 		"r": return float(slash_count()) * (h.atk_dmg() + h.sv("r", "bonus")) * 0.8 + ex * float(slash_count()) * 0.4
 	return 0.0
 
-func cast(s: String, tgt, pos: Vector2, _chg := 0.0) -> void:
+func cast(s: String, _tgt, pos: Vector2, _chg := 0.0) -> void:
 	match s:
-		"q": _cast_q(tgt, pos)
-		"w": _cast_w()
-		"r": _cast_r(tgt)
+		"w": _cast_dash(pos)
+		"q": _cast_oath()
+		"r": _cast_r(pos)
 
-# ------------------------------------------------------------ Q 瞬影斩
-func _cast_q(tgt, pos: Vector2) -> void:
+# ------------------------------------------------------------ right-click: 瞬影斩
+func _cast_dash(pos: Vector2) -> void:
 	var from: Vector2 = h.position
-	var maxd: float = h.sv("q", "dist") + float(h.ST.get("cast", 0.0))
-	var to: Vector2
-	if tgt != null:
-		var dir: Vector2 = (tgt.position - from).normalized()
-		to = tgt.position + dir * (float(tgt.radius) + h.radius + 16.0)
-		to = from + (to - from).limit_length(maxd + 80.0)
-		q_follow = tgt
-	else:
-		to = from + (pos - from).limit_length(maxd)
-		q_follow = null
+	var maxd: float = sval("w", "dist") + float(h.ST.get("cast", 0.0))
+	var dir: Vector2 = (pos - from).normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2.from_angle(h.face)
+	var to: Vector2 = from + dir * maxd   # always the full distance toward the cursor
 	q_from = from
 	g.ghost(h, from, Color(2.6, 0.4, 0.5, 0.7))
 	g.sfx("dash", 1.15, -2.0)
@@ -88,8 +95,8 @@ func _q_land() -> void:
 	var seg: Vector2 = b - a
 	var slen: float = seg.length()
 	var dir: Vector2 = seg / maxf(slen, 0.001)
-	var w: float = float(h.sdef["q"]["width"])
-	var dmg: float = h.sv("q", "dmg")
+	var w: float = float(h.sdef["w"]["width"])
+	var dmg: float = sval("w", "dmg")
 	var stun_t: float = 1.0 if h.shard_owned else 0.0
 	var hits := 0
 	for e in g.foes_all(h.team):
@@ -98,7 +105,7 @@ func _q_land() -> void:
 		if (rel - dir * tp).length() < w / 2.0 + float(e.radius):
 			g.damage(h, e, dmg, "skill", "phys", dir * 0.6)
 			if not e.dead:
-				e.mark = float(h.sdef["q"]["mark"])
+				e.mark = float(h.sdef["w"]["mark"])
 				e.mark_src = h
 				if stun_t > 0.0:
 					e.stun = maxf(float(e.stun), stun_t * (0.3 if bool(e.boss) else 1.0))
@@ -108,16 +115,13 @@ func _q_land() -> void:
 	g.sfx("lance", 1.35, -4.0)
 	if hits > 0:
 		g.add_shake(4.0, h)
-	if h.valid(q_follow) and h.is_foe(q_follow):
-		h.order_attack(q_follow)
-	q_follow = null
 
-# ------------------------------------------------------------ W 血誓
-func _cast_w() -> void:
-	oath_n = int(h.sdef["w"]["charges"])
-	oath_t = float(h.sdef["w"]["dur"])
+# ------------------------------------------------------------ Q 血誓
+func _cast_oath() -> void:
+	oath_n = int(h.sdef["q"]["charges"])
+	oath_t = float(h.sdef["q"]["dur"])
 	h.ms_buff_t = 3.0
-	h.ms_buff_pct = float(h.sdef["w"]["ms"]) / 100.0
+	h.ms_buff_pct = float(h.sdef["q"]["ms"]) / 100.0
 	g._ring(h.position, 60, 10, 0.4, SLASH_COL, 8)
 	g._burst(h.position, SLASH_COL, 18, 220.0, 0.5, 2.5)
 	g.sfx("learn", 0.7, -2.0)
@@ -125,8 +129,8 @@ func _cast_w() -> void:
 func on_attack_fire(_tgt, info: Dictionary) -> void:
 	if oath_n > 0 and oath_t > 0.0:
 		oath_n -= 1
-		info["bonus"] = float(info["bonus"]) + h.sv("w", "bonus")
-		info["ls"] = float(info["ls"]) + float(h.sdef["w"]["ls"]) / 100.0
+		info["bonus"] = float(info["bonus"]) + h.sv("q", "bonus")
+		info["ls"] = float(info["ls"]) + float(h.sdef["q"]["ls"]) / 100.0
 		info["proc"] = true
 
 # ------------------------------------------------------------ E 处决
@@ -142,15 +146,15 @@ func _execute(u) -> void:
 		extra = minf(extra, flat + 400.0)
 	g._popup(u.position + Vector2(-24, -float(u.radius) - 30.0), "处决!", "big")
 	g.damage(h, u, extra, "crit", "phys", Vector2.ZERO)
-	h.cds["q"] = maxf(0.0, float(h.cds["q"]) - float(h.sdef["e"]["qcdr"]))
+	h.cds["w"] = maxf(0.0, float(h.cds["w"]) - float(h.sdef["e"]["wcdr"]))
 	g.x_slash_fx(u.position, SLASH_COL)
 	g.sfx("ahit", 0.6, -2.0)
 
 # ------------------------------------------------------------ R 千刃
-func _cast_r(tgt) -> void:
+func _cast_r(pos: Vector2) -> void:
 	r_left = slash_count()
 	r_t = 0.0
-	r_target = tgt
+	r_target = _r_first_target(pos)
 	r_first = true
 	r_last = null
 	h.atk_phase = 0
@@ -212,7 +216,7 @@ func tick(d: float) -> void:
 		if int(h.sk["e"]) > 0 and float(u.mark) > 0.0:
 			_execute(u)
 		else:
-			u.mark = float(h.sdef["q"]["mark"])
+			u.mark = float(h.sdef["w"]["mark"])
 			u.mark_src = h
 	g.x_slash_fx(u.position, SLASH_COL)
 	g.sfx("attack", g.rng.randf_range(1.3, 1.6), -4.0)
@@ -225,9 +229,6 @@ func tick(d: float) -> void:
 func _end_r() -> void:
 	r_left = 0
 	h.invuln = 0.0
-	var follow = r_last if h.is_foe(r_last) else r_target
-	if h.is_foe(follow):
-		h.order_attack(follow)
 
 func draw(o: Node2D) -> void:
 	for s in slashes:

@@ -9,9 +9,6 @@ const HeroAI = preload("res://hero_ai.gd")
 const TeamAI = preload("res://team_ai.gd")
 const HeroesDB = preload("res://heroes_db.gd")
 const ItemsDB = preload("res://items_db.gd")
-const Enemy = preload("res://game/enemy.gd")
-const HeroShot = preload("res://game/hero_shot.gd")
-const EShot = preload("res://game/enemy_shot.gd")
 const Grid = preload("res://view/grid.gd")
 const Ring = preload("res://view/ring.gd")
 
@@ -347,20 +344,10 @@ func _hud_match_ended(win: bool) -> void:
 		_flash(Color(1, 1, 1, 0.6))
 	else:
 		center_lbl.label_settings.font_color = Color(1.0, 0.35, 0.6)
-		center_lbl.text = "SIGNAL LOST" if gm.mode == C.M.SURVIVAL else "DEFEAT"
-	if gm.mode == C.M.SURVIVAL:
-		var new_best := gm.t > best
-		if new_best:
-			best = gm.t
-			_save_best()
-		sub_lbl.text = "%s存活 %s     等级 %d     消灭 %d\n\n最长存活 %s\n\n[ R 再来一局    Esc 返回菜单 ]" % [
-			("你在霓虹尸潮中坚持了 30 分钟！\n\n" if win else ("★ 新纪录 ★\n" if new_best else "")), _fmt(gm.t), gm.player.level, gm.kills, _fmt(best)]
-	elif gm.mode == C.M.ROUNDS:
+		center_lbl.text = "DEFEAT"
+	if gm.rounds != null:
 		sub_lbl.text = "回合  霓虹队  %d  :  %d  赤潮队     用时 %s\n\n你：%s   %d / %d / %d\n\n[ R 再来一局    Esc 返回菜单 ]" % [
 			gm.rounds.score[0], gm.rounds.score[1], _fmt(gm.t), gm.player.display_name(), gm.player.kills, gm.player.deaths, gm.player.assists]
-	else:
-		sub_lbl.text = "霓虹队  %d  :  %d  赤潮队     用时 %s\n\n你：%s  等级 %d   %d / %d / %d\n\n[ R 再来一局    Esc 返回菜单 ]" % [
-			gm.team_kills[0], gm.team_kills[1], _fmt(gm.t), gm.player.display_name(), gm.player.level, gm.player.kills, gm.player.deaths, gm.player.assists]
 
 func _feed(text: String, col: Color) -> void:
 	var l := _label(16, col, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -411,33 +398,7 @@ func _update_fx_ui(delta: float) -> void:
 	if (gm.state != C.S.PLAY and gm.state != C.S.END) or gm.player == null:
 		return
 	var p := gm.player
-	if gm.mode == C.M.SURVIVAL:
-		time_lbl.text = "%s  /  30:00" % _fmt(gm.t)
-		kills_lbl.text = "消灭 %d" % gm.kills
-		var nxt := ""
-		for i in range(gm.event_i, C.EVENTS.size()):
-			var ev: Array = C.EVENTS[i]
-			if str(ev[1]).begins_with("boss"):
-				var names := {"boss1": "Boss · 典狱长", "boss2": "Boss · 典狱长·至尊", "boss3": "最终 Boss · 奇点之心"}
-				nxt = "%s  ·  %s" % [names[ev[1]], _fmt(ev[0])]
-				break
-		event_lbl.text = nxt if nxt != "" else "坚持到 30:00！"
-		if not gm.bosses.is_empty():
-			var bz = gm.bosses[0]
-			if is_instance_valid(bz) and not bz.dead:
-				event_lbl.text = "%s   %d / %d   (%d%%)" % [gm._ename(bz), int(bz.hp), int(bz.max_hp), int(100.0 * bz.hp / bz.max_hp)]
-	elif gm.mode == C.M.ROUNDS:
-		_update_rounds_hud(p)
-	else:
-		score_rt.text = "[center][color=#5fe8ff]霓虹  %d[/color]   [color=#8a92b8]%s[/color]   [color=#ff6a6a]%d  赤潮[/color][/center]" % [gm.team_kills[0], _fmt(gm.t), gm.team_kills[1]]
-		var b0 = gm.brain(0)
-		var call_txt := ""
-		if b0 != null:
-			call_txt = "   ·   队伍指令：" + str({"group": "集结推进", "fight": "开团！", "hold": "等待队友复活", "retreat": "撤退"}.get(b0.intent, ""))
-		event_lbl.text = ("先拿到 %d 次击倒获胜" % C.ARENA_KILLS if gm.t < C.ARENA_LEN else "加时赛：下一次击倒决定胜负") + call_txt
-		respawn_lbl.text = ("阵亡 · %d 秒后复活" % int(ceil(p.respawn_t))) if (p.dead and gm.state == C.S.PLAY) else ""
-		if board.visible and Engine.get_process_frames() % 15 == 0:
-			_update_board()
+	_update_rounds_hud(p)
 	var buffs := []
 	if p.haste_t > 0.0: buffs.append("极速神符 %ds" % int(ceil(p.haste_t)))
 	if p.dd_t > 0.0: buffs.append("双倍伤害 %ds" % int(ceil(p.dd_t)))
@@ -505,17 +466,11 @@ func _update_fx_ui(delta: float) -> void:
 			for id in sel.inv:
 				names.append(ItemsDB.DB[id]["name"])
 			sel_desc.text = "装备：" + ("、".join(PackedStringArray(names)) if not names.is_empty() else "无")
-		else:
-			sel_name.text = ("精英 " if sel.elite else "") + gm._ename(sel)
-			if sel.frenzy: extra += "  ·  狂怒"
-			if sel.shield: extra += "  ·  护盾"
-			sel_hp.text = "生命 %d / %d%s\n护甲 %.1f（物理减伤 %d%%）   魔抗 %d%%" % [int(sel.hp), int(sel.max_hp), extra, arm, int(round((1.0 - gm.armor_mult(arm)) * 100.0)), int(round(sel.mr_val() * 100.0))]
-			sel_desc.text = C.EDEF[sel.kind]["desc"]
 	else:
 		sel_panel.visible = false
 
 func _update_board() -> void:
-	var txt := "[center][b][color=#ffd23f]计分板[/color][/b]   [color=#8a92b8]%s · 先拿到 %d 次击倒获胜[/color][/center]\n" % [_fmt(gm.t), C.ARENA_KILLS]
+	var txt := ""
 	if gm.rounds != null:
 		txt = "[center][b][color=#ffd23f]计分板[/color][/b]   [color=#8a92b8]第 %d 回合 · 回合比分 %d : %d · 先赢 %d 回合获胜[/color][/center]\n" % [gm.rounds.round_n, gm.rounds.score[0], gm.rounds.score[1], gm.rounds.ROUNDS_TO_WIN]
 	for tm in 2:
@@ -550,11 +505,10 @@ func _hud_match_started() -> void:
 	shp._close_shop()
 	_setup_hud()
 	shp._refresh_inv()
-	var arena := gm.mode != C.M.SURVIVAL
-	minimap.visible = arena
-	score_rt.visible = arena
-	time_lbl.visible = not arena
-	kills_lbl.visible = not arena
+	minimap.visible = true
+	score_rt.visible = true
+	time_lbl.visible = false
+	kills_lbl.visible = false
 
 # ============================================================ round mode
 func _update_rounds_hud(p) -> void:

@@ -1,5 +1,6 @@
 extends Node2D
-## Base class for everything that can fight: creeps (main.gd Enemy) and heroes (hero.gd).
+## Base class for everything that can fight (heroes, hero.gd). Survival creeps were retired in stage 1.5;
+## a few of their fields (boss, kind) remain because skill code still checks them.
 ## Holds shared combat state so skills, items and AI can treat every target the same way.
 ##
 ## Generic buffs (add_buff / has_buff / buff_v), used by the data-driven skill system:

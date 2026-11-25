@@ -25,7 +25,7 @@ func _process(_d: float) -> bool:
 	var gm = main.gm
 	match f:
 		5: key(KEY_1)
-		10: main.mnu._start_arena_from_menu()
+		10: main.mnu._start_from_menu()
 		12: key(KEY_F6)
 		20: key(KEY_B)
 		25: main.shp._buy("boots")

@@ -170,8 +170,6 @@ func update(d: float) -> void:
 		s -= f.position.distance_to(front) * 0.12
 		if f == focus:
 			s += 40.0
-		if g.in_enemy_fountain(f.position, team):
-			s -= 500.0
 		if s > bs:
 			bs = s
 			best = f

@@ -9,9 +9,6 @@ const HeroAI = preload("res://hero_ai.gd")
 const TeamAI = preload("res://team_ai.gd")
 const HeroesDB = preload("res://heroes_db.gd")
 const ItemsDB = preload("res://items_db.gd")
-const Enemy = preload("res://game/enemy.gd")
-const HeroShot = preload("res://game/hero_shot.gd")
-const EShot = preload("res://game/enemy_shot.gd")
 const Grid = preload("res://view/grid.gd")
 const Ring = preload("res://view/ring.gd")
 
@@ -269,27 +266,12 @@ func _chain_ls() -> LabelSettings:
 
 # ============================================================ drawing
 func _draw_floor() -> void:
-	if gm.mode == C.M.SURVIVAL or gm.state == C.S.MENU or gm.state == C.S.SELECT:
+	if gm.state == C.S.MENU or gm.state == C.S.SELECT:
 		return
-	if gm.mode == C.M.ROUNDS:
-		_draw_rounds_floor()
-		return
-	var o := floor_layer
-	o.draw_circle(Vector2.ZERO, C.ARENA_R, Color(0.05, 0.03, 0.12, 0.55))
-	o.draw_arc(Vector2.ZERO, C.ARENA_R, 0, TAU, 160, Color(0.6, 1.2, 2.4, 0.9), 6.0)
-	o.draw_arc(Vector2.ZERO, C.ARENA_R + 14.0, 0, TAU, 160, Color(1.6, 0.4, 2.0, 0.5), 2.0)
-	o.draw_arc(Vector2.ZERO, 260.0, 0, TAU, 64, Color(0.6, 0.8, 1.6, 0.35), 2.0)
-	for tm in 2:
-		var hp := gm.home_pos(tm)
-		var c := Color(0.3, 1.6, 1.2) if tm == 0 else Color(2.0, 0.4, 0.4)
-		o.draw_circle(hp, C.FOUNTAIN_R, Color(c.r * 0.25, c.g * 0.25, c.b * 0.25, 0.35))
-		o.draw_arc(hp, C.FOUNTAIN_R, 0, TAU, 64, Color(c.r, c.g, c.b, 0.8), 3.0)
-		o.draw_arc(hp, 40.0, 0, TAU, 32, c, 4.0)
-	for spot in C.RUNE_SPOTS:
-		o.draw_arc(spot, 46.0, 0, TAU, 32, Color(1.4, 1.4, 0.6, 0.5), 2.0)
+	_draw_rounds_floor()
 
 func _draw_minimap() -> void:
-	if gm.mode == C.M.SURVIVAL or gm.state == C.S.MENU:
+	if gm.state == C.S.MENU:
 		return
 	var m := hd.minimap
 	var c := Vector2(92, 92)
@@ -297,11 +279,9 @@ func _draw_minimap() -> void:
 	m.draw_circle(c, 90.0, Color(0.03, 0.02, 0.08, 0.85))
 	m.draw_arc(c, 88.0, 0, TAU, 64, Color(0.5, 1.0, 2.0, 0.8), 2.0)
 	for tm in 2:
-		m.draw_circle(c + gm.home_pos(tm) * k, C.FOUNTAIN_R * k, Color(0.3, 1.4, 1.0, 0.4) if tm == 0 else Color(1.6, 0.3, 0.3, 0.4))
+		m.draw_circle(c + gm.home_pos(tm) * k, 170.0 * k, Color(0.3, 1.4, 1.0, 0.4) if tm == 0 else Color(1.6, 0.3, 0.3, 0.4))
 	if gm.rounds != null:
 		m.draw_arc(c + gm.rounds.core_pos() * k, gm.rounds.CORE_R * k, 0, TAU, 24, Color(1.8, 1.8, 1.8, 0.9) if gm.rounds.core_open() else Color(0.6, 0.6, 0.8, 0.6), 2.0)
-	for r in gm.runes:
-		m.draw_circle(c + r.position * k, 3.0, Color(1.6, 1.6, 0.6))
 	if gm.terrain != null:
 		for b in gm.terrain.brush:
 			m.draw_circle(c + b[0] * k, float(b[1]) * k, Color(0.2, 0.9, 0.4, 0.35))
@@ -324,26 +304,6 @@ func _draw_overlay() -> void:
 	var tick := Time.get_ticks_msec() * 0.001
 	if gm.rounds != null:
 		_draw_rounds_overlay(o, tick)
-	for z in gm.zones:
-		var p: Vector2 = z["pos"]
-		var r: float = z["r"]
-		var k: float = clampf(z["t"] / z["delay"], 0.0, 1.0)
-		var col: Color = {"artillery": Color(1.0, 0.5, 0.1), "slam": Color(1.0, 0.3, 0.2), "silence": Color(0.75, 0.3, 1.0)}[z["type"]]
-		o.draw_circle(p, r, Color(col.r, col.g, col.b, 0.12))
-		o.draw_circle(p, r * k, Color(col.r, col.g, col.b, 0.22))
-		o.draw_arc(p, r, 0, TAU, 48, Color(col.r * 1.6, col.g * 1.6, col.b * 1.6, 0.9), 2.5)
-		if z["type"] == "artillery":
-			var src: Vector2 = z.get("src", p)
-			var sp := src.lerp(p, k) + Vector2(0, -sin(k * PI) * 160.0)
-			o.draw_texture_rect(gm.TEX["shell"], Rect2(sp - Vector2(12, 12), Vector2(24, 24)), false, Color(2, 1.6, 1))
-	for e in gm.enemies:
-		if e.dead: continue
-		if e.aura != "":
-			var ac := Color(1.0, 0.25, 0.35, 0.38) if e.aura == "frenzy" else Color(0.3, 0.65, 1.0, 0.38)
-			o.draw_arc(e.position, 280.0, tick * 0.6, tick * 0.6 + TAU, 64, ac, 1.5)
-			o.draw_circle(e.position, 280.0, Color(ac.r, ac.g, ac.b, 0.025))
-		elif e.kind == "mender":
-			o.draw_arc(e.position, 260.0, 0, TAU, 48, Color(0.4, 1.0, 0.6, 0.25), 1.5)
 	for h in gm.heroes:
 		if _seen(h):
 			h.kit.draw(o)
@@ -358,24 +318,9 @@ func _draw_overlay() -> void:
 		o.draw_arc(inp.selected.position, inp.selected.radius + 10.0, 0, TAU, 32, Color(1.0, 0.85, 0.3, 0.9), 2.5)
 	if gm.player != null and not gm.player.dead and gm.mode == C.M.ROUNDS:
 		_draw_aim(o, gm.player)
-	for e in gm.enemies:
-		if e.dead or not view.has_point(e.position): continue
-		var w := clampf(e.radius * 2.2, 36.0, 220.0)
-		var top: Vector2 = e.position + Vector2(-w / 2.0, -e.radius - 18.0)
-		o.draw_rect(Rect2(top, Vector2(w, 6)), Color(0, 0, 0, 0.75))
-		o.draw_rect(Rect2(top + Vector2(1, 1), Vector2((w - 2) * clampf(e.hp / e.max_hp, 0.0, 1.0), 4)), Color(1.0, 0.82, 0.25) if e.elite else Color(0.95, 0.2, 0.2))
-		if e.shield:
-			o.draw_rect(Rect2(top - Vector2(1, 1), Vector2(w + 2, 8)), Color(0.4, 0.8, 1.6), false, 1.0)
-		if e.frenzy:
-			o.draw_rect(Rect2(top + Vector2(0, 7), Vector2(w, 2)), Color(1.6, 0.3, 0.4))
-		_draw_status(o, e, top, w, tick)
-		if e.kind == "bomber" and e.phase == 1:
-			o.draw_arc(e.position, 140.0, 0, TAU, 32, Color(1.6, 0.9, 0.2, 0.7), 2.0)
 	if inp.marker_t > 0.0:
 		var mk := inp.marker_t / 0.45
 		o.draw_arc(inp.marker_pos, 18.0 * mk + 4.0, 0, TAU, 24, Color(inp.marker_col.r, inp.marker_col.g, inp.marker_col.b, mk), 2.5)
-	if gm.state == C.S.PLAY and inp.targeting != "" and gm.player != null and not gm.player.dead:
-		_draw_targeting(o)
 
 func _draw_status(o: Node2D, u, top: Vector2, w: float, tick: float) -> void:
 	var x := w + 3.0
@@ -435,8 +380,6 @@ func _draw_hero(o: Node2D, h, tick: float) -> void:
 	var rad: Array = h.sp().get("radiance", [])
 	if not rad.is_empty():
 		o.draw_arc(pos, float(rad[1]), 0, TAU, 96, Color(1.6, 0.9, 0.3, 0.2), 2.0)
-	if h.is_player and gm.mode == C.M.SURVIVAL:
-		return
 	# bars
 	var w := 70.0
 	var top: Vector2 = pos + Vector2(-w / 2.0, -h.radius - 30.0)
@@ -452,71 +395,6 @@ func _draw_hero(o: Node2D, h, tick: float) -> void:
 	if not h.is_player:
 		o.draw_string(ui_font, top + Vector2(0, -4), h.display_name(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(hc.r, hc.g, hc.b, 0.9))
 	_draw_status(o, h, top, w, tick)
-
-func _draw_targeting(o: Node2D) -> void:
-	var mp := get_global_mouse_position()
-	var pp: Vector2 = gm.player.position
-	if inp.targeting == "attack":
-		o.draw_arc(pp, gm.player.atk_range(), 0, TAU, 96, Color(1.0, 0.3, 0.3, 0.35), 1.5)
-		o.draw_arc(mp, 14.0, 0, TAU, 24, Color(1.0, 0.3, 0.3, 0.9), 2.0)
-		o.draw_line(mp + Vector2(-20, 0), mp + Vector2(20, 0), Color(1.0, 0.3, 0.3, 0.9), 2.0)
-		o.draw_line(mp + Vector2(0, -20), mp + Vector2(0, 20), Color(1.0, 0.3, 0.3, 0.9), 2.0)
-		return
-	var st: Dictionary = gm.player.sdef[inp.targeting]
-	var col: Color = gm.player.def["col"]
-	var ind: String = st.get("ind", "circle")
-	var cast_b: float = float(gm.player.ST.get("cast", 0.0))
-	match ind:
-		"line":
-			var dir := (mp - pp).normalized()
-			var n: Vector2 = dir.orthogonal() * float(st["width"]) / 2.0
-			var ln: float = 0.0 if st.get("range", 0.0) is Array else float(st.get("range", 0.0))
-			if ln <= 0.0:
-				ln = float(gm.player.kit.ai_meta(inp.targeting).get("reach", 800.0))
-			var b: Vector2 = pp + dir * ln
-			o.draw_colored_polygon(PackedVector2Array([pp + n, b + n, b - n, pp - n]), Color(col.r * 0.3, col.g * 0.4, col.b * 0.4, 0.18))
-			o.draw_polyline(PackedVector2Array([pp + n, b + n, b - n, pp - n, pp + n]), Color(col.r, col.g, col.b, 0.8), 2.0)
-		"blink":
-			var maxd: float = gm.player.sv(inp.targeting, "dist") + cast_b
-			var dest := pp + (mp - pp).limit_length(maxd)
-			var r: float = float(st["radius"])
-			o.draw_arc(pp, maxd, 0, TAU, 96, Color(1.0, 0.4, 0.9, 0.35), 1.5)
-			o.draw_circle(dest, r, Color(1.0, 0.3, 0.9, 0.12))
-			o.draw_arc(dest, r, 0, TAU, 64, Color(1.8, 0.5, 1.6, 0.8), 2.0)
-		"dash":
-			var maxd2: float = gm.player.sv(inp.targeting, "dist") + cast_b
-			var u = inp._unit_at(mp, true)
-			var dest2: Vector2 = u.position if u != null else pp + (mp - pp).limit_length(maxd2)
-			var w2: float = float(st["width"]) / 2.0
-			var dir2 := (dest2 - pp).normalized()
-			var n2 := dir2.orthogonal() * w2
-			o.draw_arc(pp, maxd2, 0, TAU, 96, Color(col.r, col.g, col.b, 0.3), 1.5)
-			o.draw_colored_polygon(PackedVector2Array([pp + n2, dest2 + n2, dest2 - n2, pp - n2]), Color(1.0, 0.2, 0.3, 0.16))
-			o.draw_polyline(PackedVector2Array([pp + n2, dest2 + n2, dest2 - n2, pp - n2, pp + n2]), Color(col.r, col.g, col.b, 0.8), 2.0)
-			if u != null:
-				o.draw_arc(u.position, u.radius + 12.0, 0, TAU, 24, Color(2.4, 0.5, 0.6), 3.0)
-		"ally":
-			var cra: float = float(gm.player.kit.cast_range(inp.targeting, null))
-			o.draw_arc(pp, cra, 0, TAU, 96, Color(0.4, 1.6, 0.6, 0.35), 1.5)
-			var ua = inp._ally_at(mp)
-			if ua != null:
-				o.draw_arc(ua.position, ua.radius + 12.0, 0, TAU, 24, Color(0.5, 2.4, 0.8), 3.0)
-			else:
-				o.draw_arc(mp, 16.0, 0, TAU, 24, Color(0.4, 1.6, 0.6, 0.6), 2.0)
-		"unit":
-			var cr: float = float(gm.player.kit.cast_range(inp.targeting, null))
-			o.draw_arc(pp, cr, 0, TAU, 96, Color(col.r, col.g, col.b, 0.35), 1.5)
-			var u2 = inp._unit_at(mp, true)
-			if u2 != null:
-				o.draw_arc(u2.position, u2.radius + 12.0, 0, TAU, 24, Color(2.4, 0.5, 0.6), 3.0)
-			else:
-				o.draw_arc(mp, 16.0, 0, TAU, 24, Color(col.r, col.g, col.b, 0.6), 2.0)
-		_:
-			var cr2: float = float(gm.player.kit.cast_range(inp.targeting, null))
-			var rr: float = float(gm.player.kit.skill_radius(inp.targeting))
-			o.draw_arc(pp, cr2, 0, TAU, 96, Color(0.8, 0.4, 1.0, 0.35), 1.5)
-			o.draw_circle(mp, rr, Color(0.6, 0.2, 0.9, 0.14))
-			o.draw_arc(mp, rr, 0, TAU, 64, Color(1.6, 0.6, 2.0, 0.8), 2.0)
 
 # ============================================================ fx helpers
 func _burst(pos: Vector2, col: Color, amount := 14, spd := 300.0, life := 0.5, scl := 3.0) -> void:
@@ -669,8 +547,7 @@ func frame(delta: float) -> void:
 	grid.pulse = maxf(0.0, grid.pulse - delta * 1.5)
 	grid.queue_redraw()
 	overlay.queue_redraw()
-	if gm.mode != C.M.SURVIVAL:
-		hd.minimap.queue_redraw()
+	hd.minimap.queue_redraw()
 
 # ============================================================ round mode drawing
 func _draw_rounds_floor() -> void:
