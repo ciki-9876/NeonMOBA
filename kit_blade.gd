@@ -136,7 +136,7 @@ func _execute(u) -> void:
 	var extra: float = flat + (float(u.max_hp) - float(u.hp)) * h.sv("e", "pct") / 100.0
 	if not bool(u.is_hero):
 		extra = minf(extra, flat + 400.0)
-	g._popup(u.position + Vector2(-24, -float(u.radius) - 30.0), "处决!", g.label_big)
+	g._popup(u.position + Vector2(-24, -float(u.radius) - 30.0), "处决!", "big")
 	g.damage(h, u, extra, "crit", "phys", Vector2.ZERO)
 	h.cds["q"] = maxf(0.0, float(h.cds["q"]) - float(h.sdef["e"]["qcdr"]))
 	g.x_slash_fx(u.position, SLASH_COL)

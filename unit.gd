@@ -16,6 +16,9 @@ extends Node2D
 const NEGATIVE := ["root", "taunt"]
 
 var team := 1
+## deterministic id inside the current match (assigned by game/match.gd). Use it instead of
+## get_instance_id() for any gameplay decision, otherwise results stop depending only on the seed.
+var uid := 0
 var is_hero := false
 var kind := ""
 var boss := false

@@ -110,7 +110,7 @@ func _cast_w(p: Vector2) -> void:
 			e.charged = 0.0
 			e.stun = maxf(float(e.stun), stun * (0.3 if bool(e.boss) else 1.0))
 			detonated += 1
-			g._popup(e.position + Vector2(0, -float(e.radius) - 16.0), "引爆!", g.label_big)
+			g._popup(e.position + Vector2(0, -float(e.radius) - 16.0), "引爆!", "big")
 		g.damage(h, e, dmg, "skill", "magic", (e.position - dest).normalized() * 1.5)
 	g._ring(dest, 20, r, 0.4, Color(2.4, 0.6, 2.2), 12)
 	g._burst(dest, Color(2.2, 0.6, 2.2), 30, 380.0, 0.5, 3.0)
@@ -171,7 +171,7 @@ func tick_world(d: float) -> void:
 				g._flash(Color(1.0, 0.5, 1.0, 0.25))
 				g.hitstop = 0.1
 			if charged_n >= 5:
-				g._popup(p + Vector2(0, -60), "奇点坍缩 ×%d" % charged_n, g.label_big)
+				g._popup(p + Vector2(0, -60), "奇点坍缩 ×%d" % charged_n, "big")
 		else:
 			keep.append(s)
 	sings = keep

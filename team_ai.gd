@@ -153,7 +153,7 @@ func update(d: float) -> void:
 func slot(h) -> Vector2:
 	var back := -enemy_dir
 	var side := back.orthogonal()
-	var idx: int = int(h.get_instance_id() % 3) - 1
+	var idx: int = int(h.uid % 3) - 1
 	match h.role():
 		"tank":
 			return front + enemy_dir * (60.0 if intent == "fight" else 0.0)
