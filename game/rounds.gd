@@ -26,8 +26,12 @@ const SPAWN_R := 170.0           # heroes are held inside this radius during the
 const HERO_LEVEL := 12           # fixed hero level (no in-match levelling)
 const HP_MULT := 2.0             # hero max hp multiplier in round mode (fight length knob)
 const START_GOLD := 3000.0
-const WIN_PAY := 2500.0
-const LOSS_PAY := [1500.0, 2000.0, 2500.0, 3000.0]
+const WIN_PAY := 2000.0
+const LOSS_PAY_BASE := 1500.0     # loss payout: 1500 / 2000 / 2500 / ... (+500 per consecutive loss)
+const LOSS_PAY_STEP := 500.0
+
+static func loss_pay(streak: int) -> float:
+	return LOSS_PAY_BASE + LOSS_PAY_STEP * float(maxi(streak, 1) - 1)
 const KILL_PAY := 150.0
 const ASSIST_PAY := 50.0
 
@@ -216,7 +220,7 @@ func end_round(w: int, reason: String) -> void:
 			loss_streak[tm] = 0
 		else:
 			loss_streak[tm] += 1
-		var pay: float = WIN_PAY if won else float(LOSS_PAY[clampi(loss_streak[tm] - 1, 0, LOSS_PAY.size() - 1)])
+		var pay: float = WIN_PAY if won else loss_pay(loss_streak[tm])
 		for h in g.heroes:
 			if h.team == tm:
 				h.gold += pay

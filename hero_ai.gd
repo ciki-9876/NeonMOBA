@@ -8,6 +8,7 @@ extends RefCounted
 
 const C_CAST := 5
 const Profiles = preload("res://game/profiles.gd")
+const ItemsDB = preload("res://items_db.gd")
 
 var h
 var g
@@ -687,7 +688,17 @@ func _learn() -> void:
 		if not done and not h.learn("attr"):
 			break
 
+## items that answer a damage type (round mode counter-building); per role: [tank, others]
+const COUNTERS := {"phys": ["platemail", "chainmail"], "magic": ["cloak", "cloak"]}
+const ARMOR_ITEMS := ["protect", "chainmail", "platemail", "phase", "ac", "shiva", "wraith"]
+const MR_ITEMS := ["cloak"]
+## 1 = adapts its build to the opponent after a lost round (tuning: --ai_b adapt=0 turns it off)
+var adapt := 1.0
+
 func _shop() -> void:
+	if g.rounds != null:
+		_shop_rounds()
+		return
 	var build: Array = h.def["build"]
 	for id in build:
 		var sid: String = str(id)
@@ -700,3 +711,78 @@ func _shop() -> void:
 			g.sell_cheapest(h)
 		g.buy_for(h, sid, false)
 		return
+
+# ------------------------------------------------------------ round mode shopping
+## what is killing us: after a lost round, buy an answer to the damage type that dominates what
+## our team has taken so far (armor vs physical, magic resist vs magic). {} -> no counter needed
+func _counter_item() -> String:
+	if adapt <= 0.0 or g.rounds.loss_streak[h.team] <= 0:
+		return ""
+	var phys := 0.0
+	var magic := 0.0
+	for a in g.heroes:
+		if a.team == h.team:
+			phys += float(a.stats.get("taken_phys", 0.0))
+			magic += float(a.stats.get("taken_magic", 0.0))
+	var total := phys + magic
+	if total < 1500.0:
+		return ""
+	var kind := ""
+	if phys / total >= 0.6:
+		kind = "phys"
+	elif magic / total >= 0.6:
+		kind = "magic"
+	else:
+		return ""
+	var owned: Array = ARMOR_ITEMS if kind == "phys" else MR_ITEMS
+	for id in h.inv:
+		if owned.has(id):
+			return ""
+	return str(COUNTERS[kind][0 if h.role() == "tank" else 1])
+
+## the loser's one full-price sale: sell the item that helps least against what hurts us and
+## (if possible) just covers the shortfall
+func _refund_pick(shortfall: float, keep: String) -> int:
+	var best := -1
+	var best_c := 1e9
+	var top := -1
+	var top_c := -1.0
+	for i in h.inv.size():
+		var id: String = h.inv[i]
+		if id == keep or ARMOR_ITEMS.has(id) or MR_ITEMS.has(id):
+			continue
+		var c := float(ItemsDB.DB[id]["cost"])
+		if c >= shortfall and c < best_c:
+			best_c = c
+			best = i
+		if c > top_c:
+			top_c = c
+			top = i
+	return best if best >= 0 else top
+
+func _shop_rounds() -> void:
+	if g.rounds.phase != "buy":
+		return
+	var want := _counter_item()
+	var build: Array = h.def["build"].duplicate()
+	if want != "" and not h.inv.has(want):
+		build.insert(0, want)
+	for id in build:
+		var sid: String = str(id)
+		if h.inv.has(sid):
+			continue
+		var price: float = float(g.shop_price_for(h, sid))
+		if h.gold < price:
+			if sid == want and h.refund_tokens > 0:
+				var idx := _refund_pick(price - h.gold, want)
+				if idx >= 0:
+					g.sell_for(h, idx)
+					h.stat_add("refund_used")
+			if h.gold < price:
+				return
+		if g.inv_after(h, sid) > 6:
+			g.sell_cheapest(h)
+		if g.buy_for(h, sid, false) == "" and sid == want:
+			h.stat_add("counter_buy")
+		return
+

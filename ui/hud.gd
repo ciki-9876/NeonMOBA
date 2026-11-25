@@ -599,6 +599,6 @@ func _hud_round_ended(_n: int, w: int, reason: String) -> void:
 	_announce("%s 赢下本回合（%s）" % [who, reason] if w >= 0 else "平局（%s）" % reason, col, 2.0)
 	if gm.player != null:
 		var streak: int = r.loss_streak[gm.player.team]
-		var pay: float = r.WIN_PAY if w == gm.player.team else float(r.LOSS_PAY[clampi(streak - 1, 0, r.LOSS_PAY.size() - 1)])
+		var pay: float = r.WIN_PAY if w == gm.player.team else r.loss_pay(streak)
 		toast("回合收入 +%d 金%s" % [int(pay), "（连败 %d，补偿递增；下回合可原价卖出一件装备）" % streak if w != gm.player.team else ""], Color(1.0, 0.85, 0.3), 4.0)
 

@@ -271,7 +271,7 @@ func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {})
 	if not human:
 		set_autopilot(true)
 	toast("回合制 3V3：先赢 %d 个回合获胜。每回合开局有购买时间；第 %d 秒起中央核心开放，站在核心里且没有对手争夺就会推进占领进度，占满或全歼对手即赢下回合。" % [Rounds.ROUNDS_TO_WIN, int(Rounds.CORE_UNLOCK)], Color(0.7, 0.95, 1.0), 10.0)
-	toast("回合内阵亡不会复活；没有升级，只有装备成长。赢一回合 +%d，输一回合 +%d 起（连败递增），输掉的一方可以原价卖出一件装备。" % [int(Rounds.WIN_PAY), int(Rounds.LOSS_PAY[0])], Color(1.0, 0.9, 0.4), 10.0)
+	toast("回合内阵亡不会复活；没有升级，只有装备成长。赢一回合 +%d，输一回合 +%d 起（每多连败一回合 +%d），输掉的一方可以原价卖出一件装备。" % [int(Rounds.WIN_PAY), int(Rounds.LOSS_PAY_BASE), int(Rounds.LOSS_PAY_STEP)], Color(1.0, 0.9, 0.4), 10.0)
 
 ## telegraphed areas and skillshots of the other team, for AI dodging (kit.threats())
 func threats_for(tm: int) -> Array:
@@ -546,6 +546,7 @@ func damage(src, tgt, amount: float, kind: String, dtype := "magic", kb := Vecto
 			return 0.0
 		tgt.hp -= a
 		tgt.stat_add("dmg_taken", a)
+		tgt.stat_add("taken_" + dtype, a)
 		if src_hero:
 			src.stat_add("dmg_hero", a)
 			var bf = brain(src.team)
