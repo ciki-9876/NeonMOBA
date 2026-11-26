@@ -1,7 +1,8 @@
 extends SceneTree
-## UI smoke test for the league (stage 2): menu [3] -> hub tabs -> my series: map veto, hero draft (human
-## choices made by this script), one map watched as a real match (AI on both sides), one map skipped,
-## watch / skip other series, next week, simulate to the end of the season. Any SCRIPT ERROR is a bug.
+## UI smoke test for the league (stages 2–3, M1/M2): menu [3] -> new career (pick the 4th player) -> hub tabs ->
+## my series: map veto, lineup (4 选 3), hero draft (human choices made by this script), one map watched as a real match
+## with a substitution in the first buy phase, one map skipped, watch / skip other series, messages, next week,
+## simulate to the end of the season, next season. Any SCRIPT ERROR is a bug.
 ## godot --headless --fixed-fps 60 --script res://sim/smoke_league.gd
 const C = preload("res://game/consts.gd")
 const Draft = preload("res://game/league/draft.gd")
@@ -11,6 +12,7 @@ var main: Node
 var f := 0
 var phase := "start"
 var wait := 0
+var subbed := false
 
 func _initialize() -> void:
 	load("res://game/save.gd").delete()     # start from a fresh season, not from an old autosave
@@ -38,8 +40,11 @@ func _process(_d: float) -> bool:
 		"start":
 			if f == 5:
 				key(KEY_3)
+			elif f == 8:
+				note("view %s, options %s" % [lg.view, str(load("res://game/league/world.gd").pick_options(lg.pick_world))])
+				lg._choose_pick(str(load("res://game/league/world.gd").pick_options(lg.pick_world)[0]))
 			elif f == 10:
-				for t in ["table", "teams", "stats", "news", "training", "schedule"]:
+				for t in ["table", "teams", "stats", "news", "training", "inbox", "notes", "schedule"]:
 					lg._set_tab(t)
 				note("hub ok: %s" % lg.title.text)
 				var tm = lg.season["world"]["teams"][0]
@@ -73,6 +78,10 @@ func _process(_d: float) -> bool:
 			else:
 				wait = 30
 		"match":
+			if not subbed and main.gm.can_substitute() and not (main.gm.bench[0] as Array).is_empty():
+				subbed = true
+				var ok: bool = main.gm.substitute(0, 1, 0)
+				note("substitution %s: slot 1 now %s, bench %s" % [ok, main.gm.team_heroes(0)[1].profile.get("name", "?"), main.gm.bench[0][0].get("name", "?")])
 			if main.gm.state == C.S.END:
 				wait = 60
 				phase = "end"
@@ -113,12 +122,19 @@ func _process(_d: float) -> bool:
 					lg._skip_series()
 					break
 			lg._skip_others()
+			var Story = load("res://game/story/story.gd")
+			for it in Story.pending(lg.season).duplicate():
+				lg._choose_event(int(it["uid"]), 0)
 			lg._advance()
 			note("week now %d, news %d" % [int(lg.season["week"]), (lg.season["news"] as Array).size()])
 			lg._sim_to_end()
-			for t in ["table", "teams", "stats", "news", "schedule"]:
+			for t in ["table", "teams", "stats", "news", "inbox", "notes", "schedule"]:
 				lg._set_tab(t)
 			note("season %s champion %s" % [lg.season["phase"], lg.season["champion"]])
+			lg._next_season()
+			note("next season S%d, phase %s, human league %s" % [int(lg.season["no"]), lg.season["phase"], Season.human_league(lg.season)])
+			for t in ["table", "teams", "notes", "schedule"]:
+				lg._set_tab(t)
 			lg.new_season()
 			key(KEY_ESCAPE)
 			phase = "done"

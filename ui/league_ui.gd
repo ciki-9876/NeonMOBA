@@ -17,6 +17,9 @@ const Bridge = preload("res://game/league/match_bridge.gd")
 const Stories = preload("res://game/league/stories.gd")
 const Training = preload("res://game/league/training.gd")
 const Save = preload("res://game/save.gd")
+const Story = preload("res://game/story/story.gd")
+const People = preload("res://game/league/people.gd")
+const Cast = preload("res://game/league/cast_db.gd")
 
 const MatchT = preload("res://game/match.gd")
 var gm: MatchT
@@ -33,8 +36,11 @@ var app: Node = null
 const ROLE_COL := {"tank": "#6ab0ff", "carry": "#ff8a6a", "support": "#6aff9a"}
 
 var season: Dictionary = {}
-var view := "hub"          # hub | series
-var tab := "schedule"      # schedule | table | teams | stats | news
+var view := "hub"          # hub | series | pick (4th player of a new career)
+var pick_seed := 0
+var pick_world: Dictionary = {}
+var my_lineup: Dictionary = {}   # the human lineup being edited before a map ({role: pid})
+var tab := "schedule"      # schedule | training | inbox | notes | table | teams | stats | news
 var cur: Dictionary = {}   # the series on screen
 var human_side := -1       # side of the human team in `cur` (-1: watching other teams)
 var match_swap := false    # series sides flipped in the running match (human team is match team 0)
@@ -72,7 +78,7 @@ func build() -> void:
 	tabs_box = HBoxContainer.new()
 	tabs_box.add_theme_constant_override("separation", 6)
 	top.add_child(tabs_box)
-	for t in [["schedule", "赛程"], ["training", "训练"], ["table", "积分榜"], ["teams", "战队"], ["stats", "数据"], ["news", "新闻"]]:
+	for t in [["schedule", "赛程"], ["training", "训练"], ["inbox", "消息"], ["notes", "笔记"], ["table", "积分榜"], ["teams", "战队"], ["stats", "数据"], ["news", "新闻"]]:
 		var b := shp._small_btn(t[1], 76)
 		b.pressed.connect(_set_tab.bind(t[0]))
 		tabs_box.add_child(b)
@@ -104,9 +110,6 @@ func build() -> void:
 func open() -> void:
 	if season.is_empty():
 		season = Save.load_season()          # the autosave of the last session, if there is one
-		if season.is_empty():
-			season = Season.create(int(Time.get_unix_time_from_system()) % 1000000)
-	Training.ensure(season)
 	gm.state = C.S.SELECT
 	gm._clear_world()
 	_redraw_world()
@@ -114,8 +117,54 @@ func open() -> void:
 	hd.hud.visible = false
 	hd.center_lbl.text = ""
 	hd.sub_lbl.text = ""
-	view = "hub"
 	root.visible = true
+	if season.is_empty():
+		_begin_pick()
+		return
+	Training.ensure(season)
+	view = "hub"
+	refresh()
+
+## a new career: first the 4th player of 星火 (the remembered names or a walk-on)
+func _begin_pick() -> void:
+	pick_seed = int(Time.get_unix_time_from_system()) % 1000000
+	pick_world = World.build_fixed(pick_seed)
+	season = {}
+	view = "pick"
+	refresh_pick()
+
+func refresh_pick() -> void:
+	_clear(body)
+	_clear(actions)
+	title.text = "新生涯 · 星火网咖"
+	status.text = "城市赛冠军到手，次级联赛就要开始了。队里还缺一个人：前世记得的几个名字，现在还没人注意到他们。"
+	body.add_child(_rt("[b]选择第四名队员[/b]（替补，每张图 4 选 3 登场，可以在购买阶段换人）", 18))
+	for pid in World.pick_options(pick_world):
+		var p: Dictionary = pick_world["players"][pid]
+		var known: bool = Cast.CANDIDATES.has(pid)
+		var attrs := []
+		for k in Profiles.ATTRS:
+			attrs.append("%s %d" % [Profiles.ATTR_NAMES[k], int(p["attrs"][k])])
+		var heroes: Array = (p["prof"] as Dictionary).keys()
+		heroes.sort_custom(func(x, y): return float(p["prof"][x]) > float(p["prof"][y]))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var l := _rt("[color=%s]%s[/color] [b]%s[/b]  %s · %d 岁 · %s   能力 %.1f\n[color=#8a92b8]%s[/color]\n英雄：%s\n%s" % [
+			ROLE_COL[p["role"]], HeroesDB.ROLE_NAMES[p["role"]], p["name"], "女" if str(p["gender"]) == "f" else "男", int(p["age"]),
+			Cast.NATION_NAMES.get(p["nation"], p["nation"]), World.rating(p), "  ".join(PackedStringArray(attrs)),
+			"、".join(PackedStringArray(heroes.slice(0, 3).map(func(h): return _hero_name(h)))),
+			("[color=#ffd23f]前世记忆：%s[/color]" % str(p.get("tagline", ""))) if known else "[color=#8a92b8]路人：不在记忆里的面孔[/color]"], 14)
+		l.custom_minimum_size = Vector2(760, 86)
+		row.add_child(l)
+		row.add_child(_btn("选择", _choose_pick.bind(pid), 100))
+		body.add_child(row)
+	actions.add_child(_btn("返回主菜单", _to_menu, 150))
+
+func _choose_pick(pid: String) -> void:
+	season = Season.create(pick_seed, {"pick": pid})
+	pick_world = {}
+	view = "hub"
+	tab = "notes"
 	refresh()
 
 ## the arena drawing (floor, overlay) keeps the last frame until redrawn
@@ -132,8 +181,11 @@ func _to_menu() -> void:
 	mnu._show_menu()
 
 func new_season() -> void:
-	season = Season.create(int(Time.get_unix_time_from_system()) % 1000000)
 	confirm_new = false
+	_begin_pick()
+
+func _next_season() -> void:
+	season = Season.next_season(season)
 	view = "hub"
 	tab = "news"
 	refresh()
@@ -197,14 +249,22 @@ func _map_name(mid: String) -> String:
 	return str(Maps.MAPS[mid]["name"]) if Maps.MAPS.has(mid) else mid
 
 func _stage_label() -> String:
+	var lg: String = World.LEAGUE_NAMES.get(Season.human_league(season), "")
+	var pre := "S%d %s · " % [int(season.get("no", 1)), lg]
 	match str(season["phase"]):
-		"regular": return "常规赛 第 %d / %d 周" % [int(season["week"]) + 1, (season["weeks"] as Array).size()]
-		"playoffs": return "季后赛 · %s" % ("半决赛" if (season["playoffs"] as Array).size() == 1 else "总决赛")
-	return "赛季结束 · 冠军 %s" % _tname(str(season["champion"]))
+		"regular": return pre + "常规赛 第 %d / %d 周" % [int(season["week"]) + 1, Season.n_weeks(season)]
+		"playoffs": return pre + "季后赛 · %s" % ("半决赛" if (season["leagues"]["pro"]["playoffs"] as Array).size() == 1 else "总决赛")
+		"promo": return pre + "升降级附加赛"
+	return pre + "赛季结束"
 
 # ============================================================ refresh
 func refresh() -> void:
-	if root == null or season.is_empty():
+	if root == null:
+		return
+	if view == "pick":
+		refresh_pick()
+		return
+	if season.is_empty():
 		return
 	var me: Dictionary = World.team(season["world"], str(season["human"]))
 	title.text = "%s · %s" % [str(me.get("name", "联赛")), _stage_label()]
@@ -216,6 +276,8 @@ func refresh() -> void:
 	match tab:
 		"schedule": _show_schedule()
 		"training": _show_training()
+		"inbox": _show_inbox()
+		"notes": _show_notes()
 		"table": _show_table()
 		"teams": _show_teams()
 		"stats": _show_stats()
@@ -225,12 +287,15 @@ func refresh() -> void:
 func _hub_actions() -> void:
 	_autosave()
 	title.text += "  · 已自动存档" if save_ok else "  · 存档失败"
-	if str(season["phase"]) != "done":
-		actions.add_child(_btn("确认放弃？再点一次" if confirm_new else "放弃并重开", _confirm_new, 170))
+	actions.add_child(_btn("确认放弃？再点一次" if confirm_new else "放弃生涯并重开", _confirm_new, 190))
 	if str(season["phase"]) == "done":
-		status.text = "赛季已经结束。可以查看新闻里的赛季奖项，或者开始新赛季（重新生成选手和战队）。"
-		actions.add_child(_btn("开始新赛季", new_season, 160))
+		var up: bool = (season["moves"]["up"] as Array).has(str(season["human"]))
+		var down: bool = (season["moves"]["down"] as Array).has(str(season["human"]))
+		status.text = "S%d 结束。%s 查看新闻里的赛季奖项，然后进入下一赛季（选手会成长、老将会退役）。" % [int(season["no"]),
+			"我们升入了职业联赛！" if up else ("我们降入了次级联赛……" if down else "")]
+		actions.add_child(_btn("进入下一赛季", _next_season, 170))
 		return
+	var pend: int = Story.pending(season).size()
 	var hs: Dictionary = Season.human_series(season)
 	if not hs.is_empty() and not Series.done(hs):
 		var opp: String = str(hs["b"]) if str(hs["a"]) == str(season["human"]) else str(hs["a"])
@@ -245,9 +310,12 @@ func _hub_actions() -> void:
 			mini(int(hs["score"][0]), int(hs["score"][1])) if won else maxi(int(hs["score"][0]), int(hs["score"][1]))]
 	else:
 		status.text = "我方本轮没有比赛（已被淘汰）。可以观战其他比赛，或者直接出结果。"
+	if pend > 0:
+		status.text = "有 %d 条消息等你处理。  " % pend + status.text
+		actions.add_child(_btn("处理消息（%d）" % pend, _set_tab.bind("inbox"), 150))
 	if not Season.stage_done(season):
 		actions.add_child(_btn("其他比赛直接出结果", _skip_others, 190))
-	else:
+	elif pend == 0:
 		actions.add_child(_btn("进入下一轮", _advance, 150))
 	actions.add_child(_btn("模拟到赛季结束", _sim_to_end, 170))
 
@@ -256,13 +324,17 @@ func _series_line(s: Dictionary) -> String:
 	var sc := ""
 	if Series.done(s) or (s["maps"] as Array).size() > 0:
 		sc = "  [b]%d : %d[/b]" % [int(s["score"][0]), int(s["score"][1])]
-	var kind: String = str({"regular": "", "semi": "半决赛  ", "final": "总决赛  "}[str(s["kind"])])
+	var kind: String = str({"regular": "", "semi": "半决赛  ", "final": "总决赛  ", "promo": "升降级附加赛  "}[str(s["kind"])])
 	return "%s%s  vs  %s%s" % [kind, _team_bb(str(s["a"])), _team_bb(str(s["b"])), sc]
 
 func _show_schedule() -> void:
 	var cur_list: Array = Season.current_series(season)
 	body.add_child(_rt("[b]%s[/b]" % _stage_label(), 17))
+	var last_lg := ""
 	for s in cur_list:
+		if str(s.get("league", "")) != last_lg:
+			last_lg = str(s.get("league", ""))
+			body.add_child(_rt("[color=#8ad8ff]%s[/color]" % World.LEAGUE_NAMES.get(last_lg, "升降级附加赛"), 15))
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		var l := _rt(_series_line(s), 16)
@@ -287,13 +359,14 @@ func _show_schedule() -> void:
 		txt += "[color=#8a92b8]暂无[/color]\n"
 	for s in done.slice(0, 24):
 		var wk := "第 %d 周" % (int(s["week"]) + 1) if str(s["kind"]) == "regular" else "季后赛"
-		txt += "[color=#8a92b8]%s[/color]   %s\n" % [wk, _series_line(s)]
+		txt += "[color=#8a92b8]%s %s[/color]   %s\n" % [World.LEAGUE_NAMES.get(str(s.get("league", "")), "附加赛").left(2), wk, _series_line(s)]
 	body.add_child(_rt(txt, 14))
 	# the rest of the regular season
 	if str(season["phase"]) == "regular":
 		var t2 := "\n[b]后续赛程（我方）[/b]\n"
-		for w in range(int(season["week"]) + 1, (season["weeks"] as Array).size()):
-			for s in season["weeks"][w]:
+		var my_weeks: Array = season["leagues"][Season.human_league(season)]["weeks"]
+		for w in range(int(season["week"]) + 1, my_weeks.size()):
+			for s in my_weeks[w]:
 				if str(s["a"]) == str(season["human"]) or str(s["b"]) == str(season["human"]):
 					t2 += "第 %d 周   %s\n" % [w + 1, _series_line(s)]
 		body.add_child(_rt(t2, 14))
@@ -349,7 +422,7 @@ func _show_training() -> void:
 	var log: Array = tr.get("log", [])
 	if not log.is_empty():
 		var key: int = int(tr.get("log_key", -1))
-		var when := "第 %d 周" % (key + 1) if key < 100 else "季后赛"
+		var when := "第 %d 周" % (key % 1000 + 1) if key % 1000 < 100 else "季后赛"
 		var txt := "\n[b]上次训练结果[/b]  [color=#8a92b8]%s[/color]\n" % when
 		for e in log:
 			var p2: Dictionary = season["world"]["players"][str(e["pid"])]
@@ -365,24 +438,40 @@ func _plan_all(kind: String) -> void:
 	refresh()
 
 func _show_table() -> void:
-	var txt := "[b]积分榜[/b]（系列赛胜负 → 小分差；前四名进入季后赛）\n[table=6]"
-	for h in ["排名", "战队", "胜-负", "小分", "近况", "档次"]:
-		txt += "[cell][color=#8a92b8]%s[/color]   [/cell]" % h
-	var i := 1
-	for r in Season.standings(season):
-		var form := ""
-		for w in (r["form"] as Array).slice(maxi(0, (r["form"] as Array).size() - 5)):
-			form += "[color=#6aff8a]胜[/color]" if w else "[color=#ff6a6a]负[/color]"
-		var t: Dictionary = World.team(season["world"], str(r["id"]))
-		txt += "[cell]%d%s   [/cell][cell]%s   [/cell][cell]%d-%d   [/cell][cell]%d-%d   [/cell][cell]%s   [/cell][cell]%s[/cell]" % [
-			i, (" ★" if i <= 4 else ""), _team_bb(str(r["id"])), r["w"], r["l"], r["mw"], r["ml"], form, World.TIER_NAMES[int(t["tier"])]]
-		i += 1
-	txt += "[/table]"
-	body.add_child(_rt(txt, 16))
+	for lg in Season.LEAGUES:
+		var txt := "[b]%s积分榜[/b]（系列赛胜负 → 小分差；前四名进入季后赛；%s）\n[table=6]" % [World.LEAGUE_NAMES[lg],
+			"第 8 名降级、第 7 名打升降级附加赛" if lg == "pro" else "冠军升级、亚军打升降级附加赛"]
+		for h in ["排名", "战队", "胜-负", "小分", "近况", "平均能力"]:
+			txt += "[cell][color=#8a92b8]%s[/color]   [/cell]" % h
+		var i := 1
+		for r in Season.standings(season, lg):
+			var form := ""
+			for w in (r["form"] as Array).slice(maxi(0, (r["form"] as Array).size() - 5)):
+				form += "[color=#6aff8a]胜[/color]" if w else "[color=#ff6a6a]负[/color]"
+			txt += "[cell]%d%s   [/cell][cell]%s   [/cell][cell]%d-%d   [/cell][cell]%d-%d   [/cell][cell]%s   [/cell][cell]%.1f[/cell]" % [
+				i, (" ★" if i <= 4 else ""), _team_bb(str(r["id"])), r["w"], r["l"], r["mw"], r["ml"], form, Stories.team_rating(season, str(r["id"]))]
+			i += 1
+		txt += "[/table]\n"
+		body.add_child(_rt(txt, 15))
+	var hist: Array = season.get("history", [])
+	if not hist.is_empty():
+		var t2 := "[b]历届冠军[/b]\n"
+		for h in hist:
+			t2 += "S%d  职业联赛 %s   次级联赛 %s\n" % [int(h["no"]), _team_bb(str(h["champions"]["pro"])), _team_bb(str(h["champions"]["sec"]))]
+		body.add_child(_rt(t2, 14))
 
 func _show_teams() -> void:
-	for t in season["world"]["teams"]:
-		var txt := "[b]%s[/b]  [color=#8a92b8]%s · 平均能力 %.1f[/color]\n" % [_team_bb(str(t["id"])), World.TIER_NAMES[int(t["tier"])], Stories.team_rating(season, str(t["id"]))]
+	var order: Array = [str(season["human"])]
+	for lg in [Season.human_league(season), "pro", "sec"]:
+		for tid in season["leagues"][lg]["teams"]:
+			if not order.has(str(tid)):
+				order.append(str(tid))
+	for tid in order:
+		var t := World.team(season["world"], tid)
+		var coach: String = str(t.get("coach", ""))
+		var txt := "[b]%s[/b]  [color=#8a92b8]%s · 平均能力 %.1f%s[/color]\n" % [_team_bb(tid), World.LEAGUE_NAMES.get(str(t["league"]), ""),
+			Stories.team_rating(season, tid), ("  · 主教练 " + World.display_name(season["world"], coach)) if coach != "" else ""]
+		var mine: bool = tid == str(season["human"])
 		for pid in t["players"]:
 			var p: Dictionary = season["world"]["players"][pid]
 			var pool := []
@@ -397,10 +486,66 @@ func _show_teams() -> void:
 			var traits := []
 			for tr in p.get("traits", []):
 				traits.append(World.TRAITS.get(tr, tr))
-			txt += "  [color=%s]%s[/color] [b]%s[/b] %d 岁  能力 %.1f   [color=#8a92b8]%s[/color]\n      英雄池：%s%s\n" % [
-				ROLE_COL[p["role"]], HeroesDB.ROLE_NAMES[p["role"]], p["name"], int(p["age"]), World.rating(p), "  ".join(PackedStringArray(attrs)),
-				"、".join(PackedStringArray(pool)), ("    特质：" + "、".join(PackedStringArray(traits))) if not traits.is_empty() else ""]
+			var langs := []
+			for l in p.get("langs", {}):
+				langs.append("%s %d" % [Cast.LANG_NAMES.get(l, l), int(p["langs"][l])])
+			var extra := ""
+			if mine:
+				extra = "      心情 %s   状态 %s   疲劳 %d   来队 %d 周\n" % [_mood(float(p.get("sat", 70.0))), _form_txt(float(p.get("form", 0.0))), int(p.get("fatigue", 0.0)), int(p.get("wt", 0))]
+			txt += "  [color=%s]%s[/color] [b]%s[/b]%s %s %d 岁 %s  能力 %.1f   [color=#8a92b8]%s[/color]\n      英雄池：%s%s   [color=#8a92b8]语言：%s[/color]\n%s" % [
+				ROLE_COL[p["role"]], HeroesDB.ROLE_NAMES[p["role"]], p["name"], ("「%s」" % str(p.get("tagline", ""))) if str(p.get("tagline", "")) != "" else "",
+				"♀" if str(p["gender"]) == "f" else "♂", int(p["age"]), Cast.NATION_NAMES.get(p["nation"], p["nation"]), World.rating(p), "  ".join(PackedStringArray(attrs)),
+				"、".join(PackedStringArray(pool)), ("    特质：" + "、".join(PackedStringArray(traits))) if not traits.is_empty() else "", "、".join(PackedStringArray(langs)), extra]
 		body.add_child(_rt(txt, 14))
+
+func _mood(v: float) -> String:
+	return "[color=#6aff8a]满意[/color]" if v >= 65.0 else ("[color=#ffd23f]一般[/color]" if v >= 40.0 else "[color=#ff6a6a]不满[/color]")
+
+func _form_txt(v: float) -> String:
+	return "[color=#ff9a6a]火热[/color]" if v >= 1.0 else ("[color=#8ab0ff]低迷[/color]" if v <= -1.0 else "正常")
+
+## 消息: choices waiting for the player, and what happened in the story so far
+func _show_inbox() -> void:
+	var pend: Array = Story.pending(season)
+	body.add_child(_rt("[b]消息[/b]  [color=#8a92b8]（之后会搬进手机界面）[/color]", 18))
+	if pend.is_empty():
+		body.add_child(_rt("[color=#8a92b8]没有待处理的消息。[/color]", 14))
+	for it in pend:
+		var d: Dictionary = Story.describe(season, it)
+		body.add_child(_rt("[color=%s]%s[/color]  %s" % ["#ffd23f" if str(d["kind"]) == "major" else "#8ad8ff", "重要" if str(d["kind"]) == "major" else "消息", str(d["text"])], 15))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		for i in (d["choices"] as Array).size():
+			row.add_child(_btn(str(d["choices"][i]), _choose_event.bind(int(it["uid"]), i), 300))
+		body.add_child(row)
+	var log: Array = Story.state(season)["log"]
+	if not log.is_empty():
+		var txt := "\n[b]最近发生的事[/b]\n"
+		var rows: Array = log.slice(maxi(0, log.size() - 20))
+		rows.reverse()
+		for e in rows:
+			txt += "[color=#8a92b8]S%d 第 %d 周[/color]  %s\n" % [int(e["s"]), int(e["w"]), str(e["text"])]
+		body.add_child(_rt(txt, 14))
+
+func _choose_event(uid: int, choice: int) -> void:
+	Story.resolve(season, uid, choice)
+	_autosave()
+	refresh()
+
+## 前世笔记: what the protagonist remembers, and whether it still holds
+func _show_notes() -> void:
+	body.add_child(_rt("[b]前世笔记[/b]  [color=#8a92b8]你记得的原本的历史。你改变得越多，它就越不可靠。[/color]", 18))
+	var tag := {"pending": "[color=#c8d8ff]待发生[/color]", "uncertain": "[color=#ffd23f]不确定[/color]", "fulfilled": "[color=#6aff8a]已应验[/color]",
+		"changed": "[color=#ff9a6a][s]已改变[/s][/color]"}
+	var txt := ""
+	for n in Story.notes(season):
+		var t: String = str(n["text"]) if bool(n["clear"]) else "（模糊）" + str(n["text"])
+		if str(n["status"]) == "changed":
+			t = "[s]%s[/s]" % t
+		txt += "%s  %s\n" % [tag.get(n["status"], ""), t]
+	if txt == "":
+		txt = "[color=#8a92b8]暂时什么都想不起来。[/color]"
+	body.add_child(_rt(txt, 15))
 
 func _show_stats() -> void:
 	var txt := "[b]选手数据[/b]（按影响力排序：和同职业选手平均水平相比）\n[table=9]"
@@ -427,8 +572,8 @@ func _show_news() -> void:
 	var items: Array = season["news"].duplicate()
 	items.reverse()
 	var col := {"upset": "#ff9a6a", "sweep": "#c8d8ff", "comeback": "#ffd23f", "streak": "#b8a0ff", "star": "#6aff9a",
-		"stage": "#8ad8ff", "award": "#ffd23f", "intro": "#c8d8ff"}
-	var n_weeks: int = (season["weeks"] as Array).size()
+		"stage": "#8ad8ff", "award": "#ffd23f", "intro": "#c8d8ff", "story": "#ffb0e0"}
+	var n_weeks: int = Season.n_weeks(season)
 	for n in items:
 		var wk: String = ("第 %d 周" % (int(n["week"]) + 1)) if int(n["week"]) < n_weeks else "季后赛"
 		txt += "[color=#8a92b8]%s[/color]  [color=%s]%s[/color]\n" % [wk, col.get(n["kind"], "#ffffff"), n["text"]]
@@ -495,8 +640,8 @@ func _ai_step() -> void:
 	elif not (cur["draft"] as Dictionary).is_empty() and not Draft.done(cur["draft"]):
 		var d: Dictionary = cur["draft"]
 		var side2: int = int(Draft.current(d)[1])
-		var roles := [Draft.by_role(season["world"], Series.tid(cur, 0)), Draft.by_role(season["world"], Series.tid(cur, 1))]
-		Draft.apply(d, Draft.ai_choice(d, side2, roles[side2], roles[1 - side2], rng, Draft.noise_for(World.team(season["world"], Series.tid(cur, side2)))))
+		var roles := [Series.roles_of(cur, season["world"], 0), Series.roles_of(cur, season["world"], 1)]
+		Draft.apply(d, Draft.ai_choice(d, side2, roles[side2], roles[1 - side2], rng, Draft.noise_for(World.team(season["world"], Series.tid(cur, side2)), season["world"])))
 	Season.save_rng(season, rng)
 	refresh()
 	_kick_ai()
@@ -512,14 +657,53 @@ func _human_draft(hid: String) -> void:
 	_kick_ai()
 
 func _start_map_draft() -> void:
-	Series.start_draft(cur)
+	Series.start_draft(cur, season["world"], human_side, my_lineup)
+	my_lineup = {}
 	refresh()
 	_kick_ai()
+
+func _set_lineup(role: String, pid: String) -> void:
+	# swap: whoever had this player moves to the role being replaced
+	var old: String = str(my_lineup.get(role, ""))
+	for r in my_lineup:
+		if str(my_lineup[r]) == pid:
+			my_lineup[r] = old
+	my_lineup[role] = pid
+	refresh()
+
+## 4 选 3: the human picks the three starters of the next map (default: the AI suggestion)
+func _show_lineup_picker() -> void:
+	var w: Dictionary = season["world"]
+	var tid: String = Series.tid(cur, human_side)
+	if not Series.valid_lineup(w, tid, my_lineup):
+		my_lineup = People.best_lineup(w, tid)
+	var mates: Array = [str(my_lineup["tank"]), str(my_lineup["carry"]), str(my_lineup["support"])]
+	var info: Dictionary = People.lineup_info(w, mates)
+	body.add_child(_rt("[b]首发（4 选 3）[/b]  [color=#8a92b8]队内沟通 %.1f / 3 · 比赛中每回合购买阶段都可以换人[/color]" % float(info["comm"]), 16))
+	for role in Series.ROLE_ORDER:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var lab := _rt("[color=%s]%s[/color]" % [ROLE_COL[role], HeroesDB.ROLE_NAMES[role]], 15)
+		lab.custom_minimum_size.x = 60
+		lab.size_flags_horizontal = Control.SIZE_FILL
+		row.add_child(lab)
+		for pid in World.team(w, tid)["players"]:
+			var p: Dictionary = w["players"][pid]
+			var on: bool = str(my_lineup[role]) == str(pid)
+			var tw: float = float(info["mods"].get(pid, 0.0)) if mates.has(pid) else 0.0
+			var b := _btn("%s%s %.1f%s%s" % ["● " if on else "", p["name"], Draft.role_value(People.match_profile(w, p, mates), role),
+				"" if str(p["role"]) == role else "（非本职）", ("  疲劳%d" % int(p.get("fatigue", 0.0))) if float(p.get("fatigue", 0.0)) >= 60.0 else ""], _set_lineup.bind(role, str(pid)), 200)
+			if on:
+				b.modulate = Color(1.2, 1.2, 0.8)
+			row.add_child(b)
+		var mod_txt := "配合修正 %+.1f" % float(info["mods"].get(str(my_lineup[role]), 0.0))
+		row.add_child(_rt("[color=#8a92b8]%s[/color]" % mod_txt, 13))
+		body.add_child(row)
 
 func _show_series() -> void:
 	var w: Dictionary = season["world"]
 	var head := "[b]%s  %d : %d  %s[/b]   [color=#8a92b8]BO3 · %s[/color]" % [_team_bb(str(cur["a"])), int(cur["score"][0]), int(cur["score"][1]),
-		_team_bb(str(cur["b"])), {"regular": "常规赛", "semi": "半决赛", "final": "总决赛"}[str(cur["kind"])]]
+		_team_bb(str(cur["b"])), {"regular": "常规赛", "semi": "半决赛", "final": "总决赛", "promo": "升降级附加赛"}[str(cur["kind"])]]
 	body.add_child(_rt(head, 20))
 	# finished maps
 	var i := 1
@@ -568,7 +752,9 @@ func _show_series() -> void:
 	# hero draft of the next map
 	var d: Dictionary = cur["draft"]
 	if d.is_empty():
-		status.text = "第 %d 图：%s。准备禁选英雄。" % [(cur["maps"] as Array).size() + 1, _map_name(Series.next_map(cur))]
+		status.text = "第 %d 图：%s。%s准备禁选英雄。" % [(cur["maps"] as Array).size() + 1, _map_name(Series.next_map(cur)), "先定首发，再" if human_side >= 0 else ""]
+		if human_side >= 0:
+			_show_lineup_picker()
 		actions.add_child(_btn("开始禁选", _start_map_draft, 150))
 		if human_side < 0:
 			actions.add_child(_btn("整个系列赛直接出结果", _skip_series, 200))
@@ -578,7 +764,7 @@ func _show_series() -> void:
 
 func _show_draft(d: Dictionary, w: Dictionary) -> void:
 	var map_no: int = (cur["maps"] as Array).size() + 1
-	var roles := [Draft.by_role(w, Series.tid(cur, 0)), Draft.by_role(w, Series.tid(cur, 1))]
+	var roles := [Series.roles_of(cur, w, 0), Series.roles_of(cur, w, 1)]
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 24)
 	body.add_child(cols)
@@ -602,8 +788,15 @@ func _show_draft(d: Dictionary, w: Dictionary) -> void:
 	if Draft.done(d):
 		status.text = "第 %d 图 %s：禁选完成。" % [map_no, _map_name(Series.next_map(cur))]
 		if human_side >= 0:
-			actions.add_child(_btn("亲自上场（操控 %s）" % _hero_name(str(d["picks"][human_side]["carry"])), _play_map.bind(true), 230))
-			actions.add_child(_btn("观战（AI 代打）", _play_map.bind(false), 170))
+			var cap_role := ""
+			for r in cur["lineup"][human_side]:
+				if str(cur["lineup"][human_side][r]) == Cast.PROTAGONIST:
+					cap_role = str(r)
+			if cap_role != "":
+				actions.add_child(_btn("亲自上场（操控 %s）" % _hero_name(str(d["picks"][human_side][cap_role])), _play_map.bind(true), 230))
+				actions.add_child(_btn("观战（AI 代打）", _play_map.bind(false), 170))
+			else:
+				actions.add_child(_btn("观战（队长在替补席）", _play_map.bind(false), 200))
 		else:
 			actions.add_child(_btn("观战本图", _play_map.bind(false), 140))
 		actions.add_child(_btn("跳过（直接出结果）", _quick_map, 190))

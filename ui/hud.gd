@@ -62,6 +62,8 @@ var board: PanelContainer
 var board_rt: RichTextLabel
 var minimap: Control
 var respawn_lbl: Label
+var sub_box: VBoxContainer      # league 4 选 3: substitutions in the buy phase
+var _sub_sig := ""
 func _label(size: int, col := Color.WHITE, align := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
 	var l := Label.new()
 	l.label_settings = vw._ls(size, col)
@@ -236,6 +238,11 @@ func _build_ui() -> void:
 	hud.add_child(board)
 	board_rt = shp._rt(15)
 	board.add_child(board_rt)
+	sub_box = VBoxContainer.new()
+	sub_box.add_theme_constant_override("separation", 4)
+	_place(sub_box, Control.PRESET_CENTER_RIGHT, -300, -120, 280, 240)
+	sub_box.visible = false
+	hud.add_child(sub_box)
 
 	center_lbl = _label(84, Color(0.4, 1.0, 1.0), HORIZONTAL_ALIGNMENT_CENTER)
 	center_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -559,6 +566,40 @@ func _update_rounds_hud(p) -> void:
 		event_lbl.text = txt + "   ·   复活次数  %s %d / %s %d" % [_short(gm.team_names[0]), int(r.revives_left[0]), _short(gm.team_names[1]), int(r.revives_left[1])]
 	if board.visible and Engine.get_process_frames() % 15 == 0:
 		_update_board()
+	_update_subs()
+
+## league matches of the human club: during the buy phase the bench player can come in for any of the three
+func _update_subs() -> void:
+	var show: bool = gm.can_substitute() and gm.captain != "" and not (gm.bench[0] as Array).is_empty()
+	sub_box.visible = show
+	if not show:
+		_sub_sig = ""
+		return
+	var hs: Array = gm.team_heroes(0)
+	var sig := ""
+	for b in gm.bench[0]:
+		sig += str(b.get("id", "")) + ","
+	for h in hs:
+		sig += str(h.profile.get("id", "")) + ";"
+	if sig == _sub_sig:
+		return
+	_sub_sig = sig
+	for c in sub_box.get_children():
+		sub_box.remove_child(c)
+		c.queue_free()
+	var t := _label(15, Color(0.8, 0.9, 1.0))
+	t.text = "换人（购买阶段）"
+	sub_box.add_child(t)
+	for bi in (gm.bench[0] as Array).size():
+		var bp: Dictionary = gm.bench[0][bi]
+		for si in hs.size():
+			var h = hs[si]
+			var b := shp._small_btn("%s 换下 %s（%s）" % [str(bp.get("name", "?")), str(h.profile.get("name", "?")), h.display_name()], 270)
+			b.pressed.connect(func():
+				if gm.substitute(0, si, bi):
+					toast("%s 上场" % str(bp.get("name", "?")), Color(0.7, 1.0, 1.0), 2.0)
+					_sub_sig = "")
+			sub_box.add_child(b)
 
 func _hud_round_started(n: int) -> void:
 	_announce("第 %d 回合" % n, Color(0.6, 1.4, 2.0), 1.2)

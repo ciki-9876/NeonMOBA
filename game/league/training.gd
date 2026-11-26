@@ -6,7 +6,8 @@ extends RefCounted
 ##   "attr:<ability>"  one of the 6 abilities gains experience, 1 point when the bar is full (harder the higher it is)
 ##   "hero:<hero id>"  hero proficiency grows (signature heroes ×2, slower near 100)
 ##   "rest"            fatigue −35
-## Fatigue (0..100): training +14, playing +6, natural recovery −12 per week. Above 40 training gets less effective,
+## Fatigue (0..100): training +14, natural recovery −12 per week; playing a series +6 (game/league/people.gd, only for
+## the players who were on the field). Above 40 training gets less effective,
 ## and at ≥70 / ≥90 the player is 1 / 2 ability points below his sheet in matches (see in_form). Heroes a player
 ## does not train slowly lose proficiency (0.5 / week, signature 0.25; only above 60).
 ## AI teams follow the same rules with auto_plan(); the human team uses the plan set by the UI (or auto_plan).
@@ -18,7 +19,6 @@ const HeroesDB = preload("res://heroes_db.gd")
 const ATTR_XP := 4.5          # experience of one attribute session at age factor 1 and no fatigue
 const HERO_GAIN := 10.0       # proficiency of one hero session (before signature ×2 and the slow-down near 100)
 const TRAIN_FATIGUE := 14.0
-const PLAY_FATIGUE := 6.0
 const RECOVER := 12.0
 const REST_RECOVER := 35.0
 const DECAY := 0.5
@@ -41,9 +41,11 @@ static func ensure(season: Dictionary) -> Dictionary:
 
 ## identifies the current stage: regular week index, 100+n for playoff stage n, -1 when the season is over
 static func stage_key(season: Dictionary) -> int:
+	var base: int = 1000 * int(season.get("no", 1))
 	match str(season["phase"]):
-		"regular": return int(season["week"])
-		"playoffs": return 100 + (season["playoffs"] as Array).size()
+		"regular": return base + int(season["week"])
+		"playoffs": return base + 100 + (season["leagues"]["pro"]["playoffs"] as Array).size()
+		"promo": return base + 200
 	return -1
 
 static func need(v: int) -> float:
@@ -129,6 +131,8 @@ static func apply_plan(p: Dictionary, plan: String, rng: RandomNumberGenerator, 
 		var v: int = int(p["attrs"][k])
 		var xp: Dictionary = p["xp"]
 		var gain := ATTR_XP * age_factor(p) * eff * rng.randf_range(0.8, 1.2)
+		if World.rating(p) >= float(p.get("pot", 20.0)):
+			gain = 0.0      # at the potential cap: training keeps the level but cannot raise it
 		xp[k] = float(xp.get(k, 0.0)) + gain
 		var up := 0
 		while v < MAX_ATTR and float(xp[k]) >= need(v):
@@ -137,7 +141,7 @@ static func apply_plan(p: Dictionary, plan: String, rng: RandomNumberGenerator, 
 			up += 1
 		p["attrs"][k] = v
 		f += TRAIN_FATIGUE
-		var prog := "已满" if v >= MAX_ATTR else "下一点 %d%%" % int(100.0 * float(xp[k]) / need(v))
+		var prog := "已满" if v >= MAX_ATTR else ("已到瓶颈" if gain == 0.0 else "下一点 %d%%" % int(100.0 * float(xp[k]) / need(v)))
 		text = ("%s +%d（%s）" if up > 0 else "%s 进度（%s）") % ([Profiles.ATTR_NAMES[k], up, prog] if up > 0 else [Profiles.ATTR_NAMES[k], prog])
 	elif plan.begins_with("hero:"):
 		var hid := plan.substr(5)
@@ -152,8 +156,8 @@ static func apply_plan(p: Dictionary, plan: String, rng: RandomNumberGenerator, 
 		text = "%s 熟练度 +%d" % [HeroesDB.HEROES[hid]["name"], int(round(gain))]
 		if after != before:
 			text += "，升到「%s」" % after
-	# playing + natural recovery, then slow proficiency decay of heroes not trained this week
-	f = clampf(f + PLAY_FATIGUE - RECOVER, 0.0, 100.0)
+	# natural recovery, then slow proficiency decay of heroes not trained this week
+	f = clampf(f - RECOVER, 0.0, 100.0)
 	p["fatigue"] = f
 	for hid in (p["prof"] as Dictionary):
 		if hid == trained_hero:

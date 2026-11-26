@@ -172,6 +172,8 @@ func _fill_random(lst: Array) -> void:
 ##   "profiles": [[p, p, p], [p, p, p]]  players per team (game/profiles.gd); default = from difficulty
 ##   "runes":    [{hero_id: {rune_id: stacks}}, {...}]   team rune pages (game/runes_db.gd)
 ##   "human":    false to let the AI play every hero (headless simulation)
+##   "player_slot": index of the human-controlled hero in team 0 (default 0)
+##   "bench":    [[p...], [p...]] substitutes of each team (league 4 选 3); "captain": pid of the human's captain
 func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {}) -> void:
 	_clear_world()
 	reseed(match_seed)
@@ -188,11 +190,16 @@ func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {})
 	team_names = setup.get("team_names", ["霓虹队", "赤潮队"])
 	var profs: Array = setup.get("profiles", [[], []])
 	var runes: Array = setup.get("runes", [{}, {}])
+	team_runes = runes
+	bench = [(setup.get("bench", [[], []])[0] as Array).duplicate(), (setup.get("bench", [[], []])[1] as Array).duplicate()]
+	sub_records = {}
+	captain = str(setup.get("captain", ""))
+	var pslot: int = int(setup.get("player_slot", 0))
 	for tm in 2:
 		var ids: Array = a if tm == 0 else b
 		for i in ids.size():
 			var hid := str(ids[i])
-			var is_p: bool = tm == 0 and i == 0
+			var is_p: bool = tm == 0 and i == pslot
 			var h := _make_hero(hid, tm, is_p and human, diff)
 			var tp: Array = profs[tm] if tm < profs.size() else []
 			h.profile = tp[i] if i < tp.size() else Profiles.from_difficulty(diff)
@@ -218,6 +225,73 @@ func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {})
 		return   # league matches: the rules are known, keep the screen clean
 	toast("回合制 3V3：先赢 %d 个回合获胜。每回合开局有购买时间；第 %d 秒起中央核心开放，站在核心里且没有对手争夺就会推进占领进度，占满或全歼对手即赢下回合。" % [Rounds.ROUNDS_TO_WIN, int(Rounds.CORE_UNLOCK)], Color(0.7, 0.95, 1.0), 10.0)
 	toast("回合内阵亡不会复活；没有升级，只有装备成长。赢一回合 +%d，输一回合 +%d 起（每多连败一回合 +%d），输掉的一方可以原价卖出一件装备。" % [int(Rounds.WIN_PAY), int(Rounds.LOSS_PAY_BASE), int(Rounds.LOSS_PAY_STEP)], Color(1.0, 0.9, 0.4), 10.0)
+
+# ------------------------------------------------------------ substitutions (league 4 选 3)
+var bench: Array = [[], []]
+var team_runes: Array = [{}, {}]
+var sub_records := {}      # pid -> numbers of a player who was substituted out {"team", "hero", "k", "d", "a", "dmg", "heal"}
+var captain := ""          # the human's captain (protagonist) pid in league matches
+
+func team_heroes(tm: int) -> Array:
+	var out := []
+	for h in heroes:
+		if h.team == tm:
+			out.append(h)
+	return out
+
+func can_substitute() -> bool:
+	return rounds != null and rounds.phase == "buy" and state == C.S.PLAY
+
+## bench player bi of team tm takes over hero slot si (buy phase only). The hero, its items and gold stay; the new
+## player brings his own ability, proficiency and signature ability. The human control follows the captain.
+func substitute(tm: int, si: int, bi: int) -> bool:
+	if not can_substitute() or bi < 0 or bi >= (bench[tm] as Array).size():
+		return false
+	var hs := team_heroes(tm)
+	if si < 0 or si >= hs.size():
+		return false
+	var h: Hero = hs[si]
+	var out_p: Dictionary = h.profile
+	var in_p: Dictionary = bench[tm][bi]
+	# the outgoing player's numbers on this map so far
+	var base: Dictionary = h.get_meta("sub_base", {})
+	var oid: String = str(out_p.get("id", ""))
+	var rec: Dictionary = sub_records.get(oid, {"team": tm, "hero": h.hid, "k": 0, "d": 0, "a": 0, "dmg": 0.0, "heal": 0.0})
+	rec["k"] = int(rec["k"]) + h.kills - int(base.get("k", 0))
+	rec["d"] = int(rec["d"]) + h.deaths - int(base.get("d", 0))
+	rec["a"] = int(rec["a"]) + h.assists - int(base.get("a", 0))
+	rec["dmg"] = float(rec["dmg"]) + float(h.stats.get("dmg_hero", 0.0)) - float(base.get("dmg", 0.0))
+	rec["heal"] = float(rec["heal"]) + float(h.heal_done) - float(base.get("heal", 0.0))
+	sub_records[oid] = rec
+	h.set_meta("sub_base", {"k": h.kills, "d": h.deaths, "a": h.assists, "dmg": float(h.stats.get("dmg_hero", 0.0)), "heal": float(h.heal_done)})
+	sub_records.erase(str(in_p.get("id", "")))   # coming back in: his earlier numbers continue on the hero
+	bench[tm][bi] = out_p
+	h.profile = in_p
+	var page: Dictionary = (team_runes[tm] if tm < team_runes.size() else {}).get(h.hid, {})
+	var mods: Array = RunesDB.rune_mods(page, h.hid)
+	mods.append_array(RunesDB.signature_mods(Profiles.signature(in_p, h.hid), h.hid))
+	h.apply_mods(mods)
+	if h.ai != null:
+		h.ai.apply_profile(in_p)
+	if tm == 0 and captain != "":
+		if oid == captain and h == player:
+			set_autopilot(true)       # the captain sits down: his old hero is played by the substitute (AI)
+		elif str(in_p.get("id", "")) == captain:
+			_give_control(h)
+	_feed("%s 换人：%s 上场，替下 %s" % [team_names[tm] if tm < team_names.size() else "", str(in_p.get("name", "?")), str(out_p.get("name", "?"))], Color(0.8, 0.9, 1.0))
+	return true
+
+func _give_control(h: Hero) -> void:
+	if player != null and player != h:
+		player.is_player = false
+		if player.ai == null:
+			var ai := HeroAI.new()
+			ai.setup(player, self, maxi(difficulty, 1))
+			ai.apply_profile(player.profile)
+			player.ai = ai
+	player = h
+	h.is_player = true
+	autopilot = false
 
 ## telegraphed areas and skillshots of the other team, for AI dodging (kit.threats())
 func threats_for(tm: int) -> Array:

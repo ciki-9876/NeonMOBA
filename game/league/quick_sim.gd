@@ -39,9 +39,10 @@ static func play_map(a: Dictionary, b: Dictionary, map_id: String, rng: RandomNu
 	var p: float = 1.0 / (1.0 + exp(-K_ROUND * (sa - sb)))
 	var score := [0, 0]
 	var st := {}
-	for side in [a, b]:
+	for si in 2:
+		var side: Dictionary = [a, b][si]
 		for i in 3:
-			st[str(side["profiles"][i]["id"])] = {"hero": str(side["heroes"][i]), "k": 0, "d": 0, "a": 0, "dmg": 0.0, "heal": 0.0}
+			st[str(side["profiles"][i]["id"])] = {"hero": str(side["heroes"][i]), "k": 0, "d": 0, "a": 0, "dmg": 0.0, "heal": 0.0, "side": si}
 	var rounds := []
 	while score[0] < Rounds.ROUNDS_TO_WIN and score[1] < Rounds.ROUNDS_TO_WIN:
 		var w: int = 0 if rng.randf() < p else 1

@@ -22,17 +22,15 @@ static func team_rating(season: Dictionary, tid: String) -> float:
 	return s / maxf(1.0, ps.size())
 
 static func preseason(season: Dictionary) -> void:
-	var teams: Array = season["world"]["teams"].duplicate()
-	teams.sort_custom(func(x, y): return team_rating(season, str(x["id"])) > team_rating(season, str(y["id"])))
-	add(season, "新赛季开幕：%d 支战队单循环，前四名进入季后赛。夺冠热门：%s、%s。" % [teams.size(), teams[0]["name"], teams[1]["name"]], "intro")
-	if str(season["human"]) != "":
-		var me: Dictionary = World.team(season["world"], str(season["human"]))
-		var rank := 1
-		for t in teams:
-			if str(t["id"]) == str(season["human"]):
-				break
-			rank += 1
-		add(season, "%s 以实力第 %d 的身份参赛（共 %d 队），外界普遍不看好。" % [me["name"], rank, teams.size()], "intro")
+	var no: int = int(season.get("no", 1))
+	for lg in ["pro", "sec"]:
+		var ids: Array = season["leagues"][lg]["teams"].duplicate()
+		ids.sort_custom(func(x, y): return team_rating(season, str(x)) > team_rating(season, str(y)))
+		add(season, "S%d %s开幕：%d 支战队单循环，前四名进入季后赛。夺冠热门：%s、%s。" % [no, World.LEAGUE_NAMES[lg], ids.size(),
+			team_name(season, str(ids[0])), team_name(season, str(ids[1]))], "intro")
+		if str(season["human"]) != "" and ids.has(str(season["human"])):
+			var rank: int = ids.find(str(season["human"])) + 1
+			add(season, "%s 以实力第 %d 的身份参加%s（共 %d 队）。" % [team_name(season, str(season["human"])), rank, World.LEAGUE_NAMES[lg], ids.size()], "intro")
 
 static func on_series(season: Dictionary, s: Dictionary) -> void:
 	var w: String = str(s["winner"])
@@ -41,7 +39,7 @@ static func on_series(season: Dictionary, s: Dictionary) -> void:
 	ws.sort()
 	ws.reverse()
 	var gap: float = team_rating(season, l) - team_rating(season, w)
-	var stage: String = str({"regular": "", "semi": "半决赛", "final": "总决赛"}[str(s["kind"])])
+	var stage: String = str({"regular": "", "semi": "半决赛", "final": "总决赛", "promo": "升降级附加赛"}[str(s["kind"])])
 	var tag := ("%s：" % stage) if stage != "" else ""
 	if gap >= 1.8:
 		add(season, "%s爆冷！%s %d:%d 击败实力更强的 %s。" % [tag, team_name(season, w), ws[0], ws[1], team_name(season, l)], "upset")
@@ -56,8 +54,11 @@ static func on_series(season: Dictionary, s: Dictionary) -> void:
 		for pid in m["players"]:
 			var r: Dictionary = m["players"][pid]
 			if int(r["k"]) >= 8 and int(r["d"]) <= 2:
-				add(season, "%s（%s）在%s用%s打出 %d/%d/%d 的统治级表现。" % [player_name(season, pid), team_name(season, str(season["world"]["players"][pid]["team"])),
+				add(season, "%s（%s）在%s用%s打出 %d/%d/%d 的统治级表现。" % [player_name(season, pid), team_name(season, Series_tid(s, int(r.get("side", 0)))),
 					_map_name(str(m["map"])), HeroesDB.HEROES[r["hero"]]["name"], r["k"], r["d"], r["a"]], "star")
+
+static func Series_tid(s: Dictionary, side: int) -> String:
+	return str(s["a"] if side == 0 else s["b"])
 
 static func _map_name(mid: String) -> String:
 	var Maps = load("res://game/maps.gd")
@@ -67,22 +68,36 @@ static func on_stage_end(season: Dictionary) -> void:
 	if str(season["phase"]) != "regular":
 		return
 	var Season = load("res://game/league/season.gd")
-	var st: Array = Season.standings(season)
 	var wk: int = int(season["week"]) + 1
-	add(season, "第 %d 周结束：%s 以 %d 胜 %d 负领跑积分榜。" % [wk, st[0]["name"], st[0]["w"], st[0]["l"]], "stage")
-	for r in st:
-		if int(r["streak"]) in [3, 5, 7]:
-			add(season, "%s 已经取得 %d 连胜。" % [r["name"], r["streak"]], "streak")
-		elif int(r["streak"]) in [-3, -5, -7]:
-			add(season, "%s 陷入 %d 连败，压力山大。" % [r["name"], -int(r["streak"])], "streak")
+	for lg in ["pro", "sec"]:
+		var st: Array = Season.standings(season, lg)
+		add(season, "第 %d 周结束：%s 以 %d 胜 %d 负领跑%s。" % [wk, st[0]["name"], st[0]["w"], st[0]["l"], World.LEAGUE_NAMES[lg]], "stage")
+		for r in st:
+			if int(r["streak"]) in [3, 5, 7]:
+				add(season, "%s 已经取得 %d 连胜。" % [r["name"], r["streak"]], "streak")
+			elif int(r["streak"]) in [-3, -5, -7]:
+				add(season, "%s 陷入 %d 连败，压力山大。" % [r["name"], -int(r["streak"])], "streak")
+
+static func playoffs_start(season: Dictionary) -> void:
+	for lg in ["pro", "sec"]:
+		var semi: Array = season["leagues"][lg]["playoffs"][0]
+		add(season, "%s常规赛结束，季后赛对阵：%s 对 %s，%s 对 %s。" % [World.LEAGUE_NAMES[lg], team_name(season, str(semi[0]["a"])), team_name(season, str(semi[0]["b"])),
+			team_name(season, str(semi[1]["a"])), team_name(season, str(semi[1]["b"]))], "stage")
 
 static func on_season_end(season: Dictionary) -> void:
-	var champ: String = str(season["champion"])
-	add(season, "%s 夺得本赛季冠军！" % team_name(season, champ), "award")
+	var pro: Dictionary = season["leagues"]["pro"]
+	var sec: Dictionary = season["leagues"]["sec"]
+	add(season, "%s 夺得职业联赛冠军！" % team_name(season, str(pro["champion"])), "award")
+	add(season, "%s 夺得次级联赛冠军，升入职业联赛。" % team_name(season, str(sec["champion"])), "award")
+	var pm: Array = season.get("promo", [])
+	if not pm.is_empty():
+		var s: Dictionary = pm[0]
+		var stay: bool = str(s["winner"]) == str(s["a"])
+		add(season, "升降级附加赛：%s %s %s。" % [team_name(season, str(s["winner"])), "保级成功，击败" if stay else "击败", team_name(season, str(s["b"]) if stay else str(s["a"])) + ("" if stay else "，升入职业联赛")], "stage")
 	var aw := awards(season)
 	season["awards"] = aw
 	if aw.has("mvp"):
-		add(season, "赛季 MVP：%s（%s），%d 次单图 MVP，KDA %.1f。" % [player_name(season, aw["mvp"]), team_name(season, str(season["world"]["players"][aw["mvp"]]["team"])),
+		add(season, "职业联赛赛季 MVP：%s（%s），%d 次单图 MVP，KDA %.1f。" % [player_name(season, aw["mvp"]), team_name(season, str(season["world"]["players"][aw["mvp"]]["team"])),
 			int(season["pstats"][aw["mvp"]]["mvp"]), kda(season["pstats"][aw["mvp"]])], "award")
 	if aw.has("rookie"):
 		add(season, "最佳新秀：%s（%d 岁）。" % [player_name(season, aw["rookie"]), int(season["world"]["players"][aw["rookie"]]["age"])], "award")
@@ -114,9 +129,12 @@ static func awards(season: Dictionary) -> Dictionary:
 	var out := {}
 	var best := -1e9
 	var best_r := -1e9
+	var pro_teams: Array = season["leagues"]["pro"]["teams"] if season.has("leagues") else []
 	for pid in season["pstats"]:
 		var ps: Dictionary = season["pstats"][pid]
 		if int(ps["maps"]) < 4:
+			continue
+		if not pro_teams.is_empty() and not pro_teams.has(str(season["world"]["players"][pid]["team"])):
 			continue
 		var v := rel_impact(season, str(pid)) + (float(ps["wins"]) * 0.5 + float(ps["mvp"]) * 1.5) / maxf(1.0, float(ps["maps"]))
 		if v > best:

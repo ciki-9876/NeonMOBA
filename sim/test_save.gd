@@ -40,7 +40,7 @@ func _initialize() -> void:
 	Training.set_plan(s, pid, "attr:reaction")
 	check("not committed yet", not Training.committed(s))
 	var lines: Array = Training.commit_human(s)
-	check("committed, 3 reports", Training.committed(s) and lines.size() == 3)
+	check("committed, 4 reports", Training.committed(s) and lines.size() == 4)
 	check("second commit does nothing", Training.commit_human(s).is_empty())
 	check("fatigue rose", float(p["fatigue"]) > 0.0, str(p["fatigue"]))
 	var xp_total: float = float(p["xp"].get("reaction", 0.0)) + 100.0 * (int(p["attrs"]["reaction"]) - before)

@@ -124,12 +124,13 @@ static func value(p: Dictionary, hid: String) -> float:
 		v += 0.6
 	return v + float(HERO_PRIOR.get(hid, 0.0)) * 2.0
 
-## players of a team by role
-static func by_role(world: Dictionary, tid: String) -> Dictionary:
-	var out := {}
-	for p in World.team_players(world, tid):
-		out[str(p["role"])] = p
-	return out
+## best value of a player over the heroes of a role (lineup choice, 4 选 3)
+static func role_value(p: Dictionary, role: String) -> float:
+	var best := -1e9
+	for hid in HeroesDB.ORDER:
+		if str(HeroesDB.HEROES[hid]["role"]) == role:
+			best = maxf(best, value(p, hid))
+	return best
 
 ## AI ban / pick. noise (ability points) makes weaker teams draft worse.
 static func ai_choice(d: Dictionary, side: int, mine: Dictionary, theirs: Dictionary, rng: RandomNumberGenerator, noise := 0.5) -> String:
@@ -179,5 +180,12 @@ static func lineup(d: Dictionary, side: int, roles: Dictionary, order: Array) ->
 	return [heroes, profs]
 
 ## noise of a team's drafting (coach quality): tier 1 drafts sharply, tier 3 makes mistakes
-static func noise_for(team: Dictionary) -> float:
+## a coach with the 禁选大师 skill removes the mistakes (game/league/cast_db.gd COACH_SKILLS)
+static func noise_for(team: Dictionary, world := {}) -> float:
+	var coach: String = str(team.get("coach", ""))
+	if coach != "" and not world.is_empty():
+		var sk: String = str(world.get("staff", {}).get(coach, {}).get("skill", ""))
+		var Cast = load("res://game/league/cast_db.gd")
+		if Cast.COACH_SKILLS.has(sk):
+			return float(Cast.COACH_SKILLS[sk]["draft_noise"])
 	return {1: 0.3, 2: 0.6, 3: 1.0}.get(int(team["tier"]), 0.6)

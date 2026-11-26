@@ -810,7 +810,7 @@ func _visuals(d: float) -> void:
 # ============================================================ runes & signature abilities
 ## apply rune / signature mods (format: game/runes_db.gd). Call once, right after setup().
 func apply_mods(mods: Array) -> void:
-	if mods.is_empty():
+	if mods.is_empty() and rune_mods.is_empty():
 		return
 	rune_mods = mods.duplicate()
 	mods_stats = {}

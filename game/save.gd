@@ -4,7 +4,7 @@ extends RefCounted
 ## Autosave slot: user://league_auto.sav. Atomic write (temp file + rename) so a crash never leaves a broken save.
 ## Design: docs/design/经营与养成设计.md (stage 3), format notes in docs/架构说明.md.
 
-const VERSION := 1
+const VERSION := 2      # 2: two-tier league, fixed world, story (M1/M2); version-1 saves are not loaded
 const AUTO := "user://league_auto.sav"
 const MAGIC := "NEONDRIFT-SAVE"
 
@@ -44,7 +44,9 @@ static func load_season(slot := "auto") -> Dictionary:
 	if typeof(head) != TYPE_DICTIONARY or str(head.get("magic", "")) != MAGIC or int(head.get("version", 0)) > VERSION:
 		return {}
 	var body = f.get_var()
-	if typeof(body) != TYPE_DICTIONARY or not body.has("world") or not body.has("weeks"):
+	if int(head.get("version", 0)) < 2:
+		return {}
+	if typeof(body) != TYPE_DICTIONARY or not body.has("world") or not body.has("leagues"):
 		return {}
 	return migrate(body, int(head.get("version", 1)))
 
@@ -72,8 +74,8 @@ static func info_of(season: Dictionary) -> Dictionary:
 	for t in season["world"]["teams"]:
 		if str(t["id"]) == str(season.get("human", "")):
 			team = str(t["name"])
-	return {"team": team, "phase": str(season["phase"]), "week": int(season["week"]), "weeks": (season["weeks"] as Array).size(),
-		"champion": str(season.get("champion", "")), "seed": int(season["seed"])}
+	return {"team": team, "phase": str(season["phase"]), "week": int(season["week"]), "season_no": int(season.get("no", 1)),
+		"weeks": (season["leagues"]["pro"]["weeks"] as Array).size(), "champion": str(season.get("champion", "")), "seed": int(season["seed"])}
 
 ## bring an old save up to the current format (no changes needed yet; training fields are added lazily by Training.ensure)
 static func migrate(season: Dictionary, _from: int) -> Dictionary:
