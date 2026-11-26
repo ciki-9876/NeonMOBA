@@ -745,36 +745,54 @@ func _contains(x: String, id: String) -> bool:
 			return true
 	return false
 
-## the priciest component of id that is not owned yet and fits in the budget ("" = none)
-func _affordable_part(id: String, budget: float) -> String:
-	var best := ""
-	var best_c := -1.0
+## components of id still missing from the inventory (the same matching as the shop's recipe cost:
+## a component counts only while it sits in the inventory as itself)
+func _missing_parts(id: String, avail: Array, out: Array) -> void:
 	for c in ItemsDB.DB[id]["comps"]:
 		var cid: String = str(c)
-		if _owns(cid):
-			continue
+		var i := avail.find(cid)
+		if i >= 0:
+			avail.remove_at(i)
+		else:
+			out.append(cid)
+			_missing_parts(cid, avail, [])   # its own parts are covered by buying it later
+
+## the priciest missing part of id (or a part of that part) that fits in the budget ("" = none)
+func _affordable_part(id: String, budget: float) -> String:
+	var miss := []
+	_missing_parts(id, h.inv.duplicate(), miss)
+	var best := ""
+	var best_c := -1.0
+	var queue: Array = miss.duplicate()
+	while not queue.is_empty():
+		var cid: String = str(queue.pop_front())
 		var p := float(g.shop_price_for(h, cid))
-		if p <= budget and p > best_c:
-			best = cid
-			best_c = p
-		var sub := _affordable_part(cid, budget)
-		if sub != "" and float(g.shop_price_for(h, sub)) > best_c:
-			best = sub
-			best_c = float(g.shop_price_for(h, sub))
+		if p <= budget:
+			if p > best_c:
+				best = cid
+				best_c = p
+		else:
+			var sub := []
+			_missing_parts(cid, h.inv.duplicate(), sub)
+			queue.append_array(sub)
 	return best
 
-## buys toward the first build item not owned yet: the whole item when affordable, otherwise its priciest
-## affordable component. Returns true if something was bought.
+## buys toward the build: the first item not owned yet — whole when affordable, otherwise its priciest
+## affordable missing part. An item with no affordable part is saved for only when the hero has at least
+## 60% of its price; otherwise the next item of the build is tried. Returns true if something was bought.
 func _buy_next(build: Array) -> bool:
 	for id in build:
 		var sid: String = str(id)
 		if _owns(sid):
 			continue
+		var price := float(g.shop_price_for(h, sid))
 		var pick := sid
-		if h.gold < float(g.shop_price_for(h, sid)):
+		if h.gold < price:
 			pick = _affordable_part(sid, h.gold)
 			if pick == "":
-				return false
+				if h.gold >= price * 0.6:
+					return false
+				continue
 		if not g.is_consumed_item(pick) and g.inv_after(h, pick) > 6:
 			g.sell_cheapest(h)
 		return g.buy_for(h, pick, false) == ""

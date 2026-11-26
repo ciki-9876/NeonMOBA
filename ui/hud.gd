@@ -109,7 +109,8 @@ func _build_ui() -> void:
 	_place(time_lbl, Control.PRESET_CENTER_TOP, -200, 8, 400, 40)
 	hud.add_child(time_lbl)
 	score_rt = shp._rt(30)
-	_place(score_rt, Control.PRESET_CENTER_TOP, -260, 6, 520, 44)
+	_place(score_rt, Control.PRESET_CENTER_TOP, -380, 6, 760, 44)
+	score_rt.autowrap_mode = TextServer.AUTOWRAP_OFF
 	hud.add_child(score_rt)
 	event_lbl = _label(16, Color(1.0, 0.75, 0.9), HORIZONTAL_ALIGNMENT_CENTER)
 	_place(event_lbl, Control.PRESET_CENTER_TOP, -300, 46, 600, 24)
@@ -414,7 +415,11 @@ func _update_fx_ui(delta: float) -> void:
 	shp._update_ui_v3(delta)
 	lvl_lbl.text = str(p.level)
 	xp_fill.size.x = 64.0 * (1.0 if p.level >= 25 else clampf(p.xp / p.xp_need(), 0.0, 1.0))
-	points_lbl.text = ("技能点 %d" % p.skill_points) if p.skill_points > 0 else ""
+	var learnable := false
+	for sk in ["q", "e", "r"]:
+		if p.can_learn(sk):
+			learnable = true
+	points_lbl.text = ("技能点 %d" % p.skill_points) if p.skill_points > 0 and learnable else ""
 	hp_fill.size.x = 628.0 * clampf(p.hp / p.max_hp, 0.0, 1.0)
 	hp_txt.text = "%d / %d   +%.1f" % [int(p.hp), int(p.max_hp), p.hp_regen()]
 	mp_fill.size.x = 628.0 * clampf(p.mana / p.mana_max, 0.0, 1.0)
@@ -511,10 +516,15 @@ func _hud_match_started() -> void:
 	kills_lbl.visible = false
 
 # ============================================================ round mode
+## team name without the trailing 队 (霓虹队 -> 霓虹)
+func _short(n) -> String:
+	var s := str(n)
+	return s.trim_suffix("队") if s.length() > 2 else s
+
 func _update_rounds_hud(p) -> void:
 	var r = gm.rounds
-	score_rt.text = "[center][color=#5fe8ff]霓虹  %d[/color]   [color=#8a92b8]第 %d 回合 · %s[/color]   [color=#ff6a6a]%d  赤潮[/color][/center]" % [
-		r.score[0], r.round_n, _fmt(maxf(0.0, r.time_left())), r.score[1]]
+	score_rt.text = "[center][color=#5fe8ff]%s  %d[/color]   [color=#8a92b8]第 %d 回合 · %s[/color]   [color=#ff6a6a]%d  %s[/color][/center]" % [
+		_short(gm.team_names[0]), r.score[0], r.round_n, _fmt(maxf(0.0, r.time_left())), r.score[1], _short(gm.team_names[1])]
 	var txt := ""
 	match r.phase:
 		"buy":
@@ -525,7 +535,7 @@ func _update_rounds_hud(p) -> void:
 			if not r.core_open():
 				txt = "核心 %d 秒后开放" % int(ceil(r.CORE_UNLOCK - r.phase_t))
 			else:
-				txt = "核心开放 · 占领  霓虹 %d%%  /  赤潮 %d%%" % [int(r.capture[0] * 100.0), int(r.capture[1] * 100.0)]
+				txt = "核心开放 · 占领  %s %d%%  /  %s %d%%" % [_short(gm.team_names[0]), int(r.capture[0] * 100.0), _short(gm.team_names[1]), int(r.capture[1] * 100.0)]
 				if r.phase_t >= r.OVERTIME_AT:
 					txt += " · 决战：占领速度 ×2"
 		"post":

@@ -104,6 +104,7 @@ func open() -> void:
 		season = Season.create(int(Time.get_unix_time_from_system()) % 1000000)
 	gm.state = C.S.SELECT
 	gm._clear_world()
+	_redraw_world()
 	mnu.menu_root.visible = false
 	hd.hud.visible = false
 	hd.center_lbl.text = ""
@@ -111,6 +112,11 @@ func open() -> void:
 	view = "hub"
 	root.visible = true
 	refresh()
+
+## the arena drawing (floor, overlay) keeps the last frame until redrawn
+func _redraw_world() -> void:
+	vw.overlay.queue_redraw()
+	vw.floor_layer.queue_redraw()
 
 func hide() -> void:
 	if root != null:
@@ -203,8 +209,13 @@ func _hub_actions() -> void:
 		actions.add_child(_btn("进入我的系列赛", _open_series.bind(hs), 170))
 	elif Season.stage_done(season):
 		status.text = "本轮所有比赛已经结束。"
+	elif not hs.is_empty():
+		var won: bool = str(hs["winner"]) == str(season["human"])
+		status.text = "我方本轮比赛已结束（%s %d:%d）。其他比赛可以逐场观战，也可以直接出结果。" % [
+			"胜" if won else "负", maxi(int(hs["score"][0]), int(hs["score"][1])) if won else mini(int(hs["score"][0]), int(hs["score"][1])),
+			mini(int(hs["score"][0]), int(hs["score"][1])) if won else maxi(int(hs["score"][0]), int(hs["score"][1]))]
 	else:
-		status.text = "我方本轮没有比赛（已被淘汰或轮空）。可以观战其他比赛，或者直接出结果。"
+		status.text = "我方本轮没有比赛（已被淘汰）。可以观战其他比赛，或者直接出结果。"
 	if not Season.stage_done(season):
 		actions.add_child(_btn("其他比赛直接出结果", _skip_others, 190))
 	else:
@@ -226,7 +237,8 @@ func _show_schedule() -> void:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
 		var l := _rt(_series_line(s), 16)
-		l.custom_minimum_size.x = 620
+		l.custom_minimum_size.x = 520
+		l.size_flags_horizontal = Control.SIZE_FILL
 		row.add_child(l)
 		if not Series.done(s):
 			var mine: bool = str(s["a"]) == str(season["human"]) or str(s["b"]) == str(season["human"])
@@ -242,6 +254,8 @@ func _show_schedule() -> void:
 	var txt := "\n[b]已完成的比赛[/b]\n"
 	var done: Array = season["done"].duplicate()
 	done.reverse()
+	if done.is_empty():
+		txt += "[color=#8a92b8]暂无[/color]\n"
 	for s in done.slice(0, 24):
 		var wk := "第 %d 周" % (int(s["week"]) + 1) if str(s["kind"]) == "regular" else "季后赛"
 		txt += "[color=#8a92b8]%s[/color]   %s\n" % [wk, _series_line(s)]
@@ -319,8 +333,9 @@ func _show_news() -> void:
 	items.reverse()
 	var col := {"upset": "#ff9a6a", "sweep": "#c8d8ff", "comeback": "#ffd23f", "streak": "#b8a0ff", "star": "#6aff9a",
 		"stage": "#8ad8ff", "award": "#ffd23f", "intro": "#c8d8ff"}
+	var n_weeks: int = (season["weeks"] as Array).size()
 	for n in items:
-		var wk := "第 %d 周" % (int(n["week"]) + 1)
+		var wk: String = ("第 %d 周" % (int(n["week"]) + 1)) if int(n["week"]) < n_weeks else "季后赛"
 		txt += "[color=#8a92b8]%s[/color]  [color=%s]%s[/color]\n" % [wk, col.get(n["kind"], "#ffffff"), n["text"]]
 	body.add_child(_rt(txt, 15))
 
@@ -495,6 +510,8 @@ func _show_draft(d: Dictionary, w: Dictionary) -> void:
 		else:
 			actions.add_child(_btn("观战本图", _play_map.bind(false), 140))
 		actions.add_child(_btn("跳过（直接出结果）", _quick_map, 190))
+		if human_side < 0:
+			actions.add_child(_btn("返回赛程", _back_to_hub, 120))
 		return
 	var cur_step: Array = Draft.current(d)
 	var action: String = str(cur_step[0])
@@ -595,6 +612,7 @@ func on_match_done(abandon := false) -> void:
 		res = Bridge.result_from(gm, cur, match_swap)
 	gm.state = C.S.SELECT
 	gm._clear_world()
+	_redraw_world()
 	hd.hud.visible = false
 	hd.center_lbl.text = ""
 	hd.sub_lbl.text = ""

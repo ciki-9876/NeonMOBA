@@ -214,6 +214,8 @@ func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {})
 	_begin_common()
 	if not human:
 		set_autopilot(true)
+	if bool(setup.get("league", false)):
+		return   # league matches: the rules are known, keep the screen clean
 	toast("回合制 3V3：先赢 %d 个回合获胜。每回合开局有购买时间；第 %d 秒起中央核心开放，站在核心里且没有对手争夺就会推进占领进度，占满或全歼对手即赢下回合。" % [Rounds.ROUNDS_TO_WIN, int(Rounds.CORE_UNLOCK)], Color(0.7, 0.95, 1.0), 10.0)
 	toast("回合内阵亡不会复活；没有升级，只有装备成长。赢一回合 +%d，输一回合 +%d 起（每多连败一回合 +%d），输掉的一方可以原价卖出一件装备。" % [int(Rounds.WIN_PAY), int(Rounds.LOSS_PAY_BASE), int(Rounds.LOSS_PAY_STEP)], Color(1.0, 0.9, 0.4), 10.0)
 
@@ -653,7 +655,9 @@ func _kill_feed(v, k, kt: int) -> void:
 	var who_k: String = ("你" if k != null and k.is_player else kname)
 	var who_v: String = ("你" if v.is_player else v.display_name())
 	var fc := Color(0.5, 1.6, 1.8) if kt == 0 else Color(2.0, 0.55, 0.55)
-	_feed("%s %s 击倒了 %s %s" % [("霓虹" if kt == 0 else "赤潮"), who_k, ("赤潮" if kt == 0 else "霓虹"), who_v], fc)
+	var n0: String = str(team_names[0]).trim_suffix("队")
+	var n1: String = str(team_names[1]).trim_suffix("队")
+	_feed("%s %s 击倒了 %s %s" % [(n0 if kt == 0 else n1), who_k, (n1 if kt == 0 else n0), who_v], fc)
 	if not first_blood:
 		first_blood = true
 		_announce("第一滴血！", Color(1.0, 0.3, 0.35), 1.4)
