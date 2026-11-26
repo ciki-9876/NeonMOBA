@@ -11,8 +11,8 @@ const ATTRS := ["reaction", "mechanics", "awareness", "decision", "teamwork", "c
 const ATTR_NAMES := {"reaction": "反应", "mechanics": "操作", "awareness": "意识", "decision": "决断", "teamwork": "配合", "composure": "心态"}
 
 ## proficiency stages: [min proficiency, name, ability multiplier]
-## calibrated: 生疏 vs 精通 on the same player should cost roughly 10–15% win rate (stage 1 batch)
-const STAGES := [[0, "生疏", 0.82], [25, "熟悉", 0.90], [60, "精通", 1.00], [90, "大师", 1.03]]
+## calibrated: 生疏 vs 精通 on the same player should cost roughly 10–15% win rate (re-checked 2026-11-25, noisy)
+const STAGES := [[0, "生疏", 0.87], [25, "熟悉", 0.94], [60, "精通", 1.00], [90, "大师", 1.03]]
 const SIG_PROF_BONUS := 2.0      # signature heroes gain proficiency twice as fast (training, stage 3)
 
 static func make(pname: String, v: int, prof := {}, sig := {}) -> Dictionary:
@@ -45,7 +45,7 @@ static func stage(p: Dictionary, hero_id: String) -> Array:
 
 ## how strongly ability differences show around an average player (11): calibration knob, see
 ## docs/design/核心对战规则与选手属性设计.md (target: +2 -> ~60% win rate, +5 -> ~80%)
-const SENSITIVITY := 0.35
+const SENSITIVITY := 0.55
 const AVERAGE := 11.0
 
 ## 0..1 effective ability on this hero: ((attr * stage multiplier) around AVERAGE, scaled by SENSITIVITY),
