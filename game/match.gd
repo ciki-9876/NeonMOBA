@@ -323,7 +323,8 @@ func foes_in_arc(tm: int, p: Vector2, dir: Vector2, reach: float, arc: float) ->
 
 func spawn_bolt(h, p: Vector2, dir: Vector2, dmg: float, info: Dictionary) -> void:
 	bolts.append({"owner": h, "team": h.team, "pos": p, "dir": dir, "speed": h.proj_speed(), "left": h.bolt_reach(),
-		"dmg": dmg, "info": info, "r": 8.0, "trail": p})
+		"dmg": dmg, "info": info, "r": 8.0, "trail": p, "start": p, "range": h.atk_range(),
+		"pierce": int(h.sp().get("pierce", 0)), "hit": []})
 	sfx("attack", rng.randf_range(1.1, 1.3), -10.0)
 
 func _update_bolts(d: float) -> void:
@@ -343,6 +344,8 @@ func _update_bolts(d: float) -> void:
 		var hit = null
 		var best := 1e9
 		for u in foes_in(int(b["team"]), p0.lerp(p1, 0.5), step * 0.5 + float(b["r"]) + 40.0):
+			if (b["hit"] as Array).has(u):
+				continue
 			var cp: Vector2 = Geometry2D.get_closest_point_to_segment(u.position, p0, p1)
 			if cp.distance_to(u.position) <= float(u.radius) + float(b["r"]):
 				var along: float = p0.distance_to(cp)
@@ -350,11 +353,18 @@ func _update_bolts(d: float) -> void:
 					best = along
 					hit = u
 		if hit != null:
-			p1 = hit.position
-			done = true
+			(b["hit"] as Array).append(hit)
+			if int(b["pierce"]) > 0:
+				b["pierce"] = int(b["pierce"]) - 1   # 穿甲弹匣: keeps flying through the first target
+			else:
+				p1 = hit.position
+				done = true
 			var o = b["owner"]
 			if o != null and is_instance_valid(o):
-				o.attack_hit(hit, float(b["dmg"]), b["info"])
+				var far: bool = (b["start"] as Vector2).distance_to(hit.position) > float(b["range"])
+				var hinfo: Dictionary = b["info"]
+				hinfo["far"] = far
+				o.attack_hit(hit, float(b["dmg"]), hinfo)
 				if bool(hit.is_hero):
 					o.stat_add("atk_hit")
 					hit.stat_add("atk_taken")
@@ -482,8 +492,12 @@ func item_chain(h, first, bounces: int, dmg: float) -> void:
 		cur = nxt
 	sfx("zap", rng.randf_range(1.1, 1.4), -10.0, 0.08)
 
+## damage that gets through x points of def / res: 100 / (100 + x); negative values amplify
+func def_mult(x: float) -> float:
+	return 100.0 / (100.0 + x) if x >= 0.0 else 2.0 - 100.0 / (100.0 - x)
+
 func armor_mult(a: float) -> float:
-	return 1.0 - (0.06 * a) / (1.0 + 0.06 * absf(a))
+	return def_mult(a)
 
 func brain(tm: int):
 	return brains.get(tm, null)
@@ -495,9 +509,13 @@ func allies_in(tm: int, p: Vector2, r: float) -> Array:
 			out.append(h)
 	return out
 
+## skill heals: src is the casting hero (skill power and 支援信标 apply); lifesteal passes src = null
 func heal(src, tgt, amount: float) -> void:
 	if tgt == null or not is_instance_valid(tgt) or tgt.dead or amount <= 0.0:
 		return
+	amount *= 1.0 - tgt.buff_v("grievous")
+	if src != null and is_instance_valid(src) and src.is_hero:
+		amount *= src.support_mult()
 	var before: float = tgt.hp
 	tgt.hp = minf(tgt.max_hp, tgt.hp + amount)
 	var done: float = tgt.hp - before
@@ -521,20 +539,23 @@ func damage(src, tgt, amount: float, kind: String, dtype := "magic", kb := Vecto
 		return 0.0
 	var src_hero: bool = src != null and is_instance_valid(src) and src.is_hero
 	var a := amount
-	if tgt.is_hero and is_attack:
-		var eva: float = float(tgt.ST.get("eva", 0.0))
-		var true_strike: bool = src_hero and not (src.sp().get("mkb", []) as Array).is_empty()
-		if eva > 0.0 and not true_strike and rng.randf() < eva:
-			if tgt.is_player or (src_hero and src.is_player):
-				_popup(tgt.position + Vector2(-20, -40), "闪避", "set")
-			return 0.0
+	var skill_dmg: bool = kind in ["skill", "dot", "chain"]
+	if src_hero and skill_dmg:
+		a *= src.pow_mult()
 	if dtype == "phys":
-		a *= armor_mult(tgt.armor_val())
+		a *= def_mult(tgt.armor_val())
 	elif dtype == "magic":
-		if src_hero:
-			a *= 1.0 + float(src.ST.get("amp", 0.0))
-		a *= 1.0 - tgt.mr_val()
+		a *= def_mult(tgt.mr_val())
 	a *= tgt.dmg_taken_mult()
+	if src_hero and kind == "skill" and tgt.is_hero:
+		var gv: Array = src.sp().get("grievous", [])
+		if not gv.is_empty():
+			tgt.add_buff("grievous", float(gv[1]), float(gv[0]), src)
+		# 屏障发生器: the first skill hit each round raises a shield before the damage lands
+		var ssh: float = float(tgt.sp().get("spell_shield", 0.0))
+		if ssh > 0.0 and not tgt.spell_shield_used:
+			tgt.spell_shield_used = true
+			tgt.add_barrier(ssh, 4.0)
 	if tgt.barrier > 0.0:
 		var absorbed: float = minf(a, tgt.barrier)
 		tgt.barrier -= absorbed
@@ -560,6 +581,9 @@ func damage(src, tgt, amount: float, kind: String, dtype := "magic", kb := Vecto
 		tgt.stat_add("taken_" + dtype, a)
 		if src_hero:
 			src.stat_add("dmg_hero", a)
+			var vamp: float = float(src.sp().get("spell_vamp", 0.0))
+			if vamp > 0.0 and skill_dmg:
+				heal(null, src, a * vamp)
 			var bf = brain(src.team)
 			if bf != null and bf.focus == tgt:
 				src.stat_add("focus_dmg", a)
@@ -660,13 +684,10 @@ func _apply_auras() -> void:
 		h.shiva_v = 0.0
 	for h in heroes:
 		if h.dead: continue
-		var spx: Dictionary = h.sp()
-		var acv: float = float(spx.get("ac_aura", 0.0))
-		var shv: float = float(spx.get("shiva", 0.0))
-		if acv <= 0.0 and shv <= 0.0: continue
-		for u in foes_in(h.team, h.position, 900.0):
-			u.ac_v = maxf(u.ac_v, acv)
-			u.shiva_v = maxf(u.shiva_v, shv)
+		var aura: Array = h.sp().get("as_aura", [])
+		if aura.is_empty(): continue
+		for u in foes_in(h.team, h.position, float(aura[1])):
+			u.shiva_v = maxf(u.shiva_v, float(aura[0]))
 
 # ============================================================ projectiles & zones
 # ============================================================ shop & inventory (works for any hero)
@@ -684,8 +705,12 @@ func _plan_cost(id: String, avail: Array) -> int:
 			c += _plan_cost(comp, avail)
 	return c
 
+## consumed on purchase (no inventory slot): 特化芯片
+func is_consumed_item(id: String) -> bool:
+	return (ItemsDB.DB[id]["special"] as Dictionary).has("shard")
+
 func shop_price_for(h, id: String) -> int:
-	if ItemsDB.DB[id]["cat"] == "consumable":
+	if is_consumed_item(id):
 		return int(ItemsDB.DB[id]["cost"])
 	return _plan_cost(id, h.inv.duplicate())
 
@@ -706,56 +731,43 @@ func sell_cheapest(h) -> void:
 		sell_for(h, bi)
 
 ## returns "" on success, otherwise the reason
+## returns "" on success, otherwise the reason
 func buy_for(h, id: String, verbose: bool) -> String:
 	var it: Dictionary = ItemsDB.DB[id]
 	if rounds != null:
 		var why: String = rounds.shop_block_reason()
 		if why != "":
 			return why
-		if it["cat"] == "consumable" and (it["special"] as Dictionary).has("c_xp"):
-			return "回合制没有等级成长，不能使用经验书"
-	if it["cat"] == "consumable":
-		var spc: Dictionary = it["special"]
-		if spc.has("shard") and h.shard_owned:
-			return "已经使用过魔晶"
-		if spc.has("moon") and h.moon_used:
-			return "银月之晶只能使用一次"
+	var spc: Dictionary = it["special"]
+	if is_consumed_item(id):
+		if h.shard_owned:
+			return "已经装配过特化芯片"
 		if h.gold < float(it["cost"]):
 			return "金钱不足"
 		h.gold -= float(it["cost"])
-		_consume(h, spc)
+		h.shard_owned = true
+		h.recalc()
 		if verbose:
 			sfx("pickup", 1.3, -4.0)
-			var note: String = it["note"]
-			if spc.has("shard"):
-				note = str(h.def["shard_note"])
-			toast("使用 %s：%s" % [it["name"], note], Color(0.6, 1.0, 0.6), 3.0)
-	else:
-		var avail: Array = h.inv.duplicate()
-		var cost := _plan_cost(id, avail)
-		if avail.size() + 1 > 6:
-			return "物品栏已满（右键物品可出售）"
-		if h.gold < float(cost):
-			return "金钱不足（还差 %d）" % int(cost - h.gold)
-		h.gold -= float(cost)
-		var used: int = h.inv.size() - avail.size()
-		h.inv = avail
-		h.inv.append(id)
-		h.recalc()
-		if verbose:
-			sfx("rune", 1.1, -6.0)
-			toast(("合成 %s" if used > 0 else "购买 %s") % it["name"], Color(1.0, 0.85, 0.3), 3.0)
+			toast("装配 %s：%s" % [it["name"], str(h.def.get("shard_note", it["note"]))], Color(0.6, 1.0, 0.6), 3.0)
+		return ""
+	if spc.has("scepter") and h.inv.has(id):
+		return "已经拥有终极协议"
+	var avail: Array = h.inv.duplicate()
+	var cost := _plan_cost(id, avail)
+	if avail.size() + 1 > 6:
+		return "物品栏已满（右键物品可出售）"
+	if h.gold < float(cost):
+		return "金钱不足（还差 %d）" % int(cost - h.gold)
+	h.gold -= float(cost)
+	var used: int = h.inv.size() - avail.size()
+	h.inv = avail
+	h.inv.append(id)
+	h.recalc()
+	if verbose:
+		sfx("rune", 1.1, -6.0)
+		toast(("合成 %s" if used > 0 else "购买 %s") % it["name"], Color(1.0, 0.85, 0.3), 3.0)
 	return ""
-
-func _consume(h, spc: Dictionary) -> void:
-	if spc.has("c_hp"): h.regen_buffs.append({"hp": float(spc["c_hp"][0]), "t": float(spc["c_hp"][1])})
-	if spc.has("c_mp"): h.regen_buffs.append({"mp": float(spc["c_mp"][0]), "t": float(spc["c_mp"][1])})
-	if spc.has("c_mana_now"): h.mana = minf(h.mana_max, h.mana + float(spc["c_mana_now"]))
-	if spc.has("c_xp"): h.gain_xp(h.xp_need() * float(spc["c_xp"]))
-	if spc.has("shard"): h.shard_owned = true
-	if spc.has("moon"):
-		h.moon_used = true
-		h.recalc()
 
 func sell_for(h, i: int) -> float:
 	if i >= h.inv.size(): return 0.0

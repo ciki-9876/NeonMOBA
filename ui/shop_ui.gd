@@ -27,7 +27,7 @@ var inp: PlayerInputT
 var app: Node = null
 
 var shop_open := false
-var shop_tab := "consumable"
+var shop_tab := "basic"
 var shop_hover := ""
 var shop: PanelContainer
 var shop_grid: GridContainer
@@ -64,23 +64,23 @@ func _on_shop_input(ev: InputEvent, id: String) -> void:
 	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
 		_buy(id)
 
-const STAT_NAMES := {"str": "力量", "agi": "敏捷", "int": "智力", "all": "全属性", "dmg": "攻击力", "as": "攻击速度",
-	"armor": "护甲", "ms": "移动速度", "ms_pct": "% 移动速度", "hp": "生命值", "mana": "魔法值", "hpr": "生命回复",
-	"mpr": "魔法回复", "mr": "% 魔法抗性", "ls": "% 吸血", "eva": "% 闪避", "amp": "% 技能增强", "cdr": "% 冷却缩减",
-	"cast": "施法距离", "range": "攻击距离"}
+const STAT_NAMES := {"atk": "攻击力", "as": "% 攻击速度", "def": "物理防御", "res": "法术防御", "ms": "移动速度",
+	"hp": "生命值", "mana": "法力值", "hpr": "生命回复", "mpr": "法力回复", "ls": "% 吸血", "pow": "% 技能强度",
+	"cdr": "% 冷却缩减", "range": "攻击距离", "pspd": "弹道速度", "vision": "视野"}
+const CAT_NAMES := {"basic": "基础", "advanced": "进阶", "ultimate": "终极", "upgrade": "英雄强化"}
 func _num(v: float) -> String:
 	return str(int(v)) if absf(v - roundf(v)) < 0.01 else ("%.2f" % v).rstrip("0")
 
 func _item_text(id: String, with_price: bool) -> String:
 	var it: Dictionary = ItemsDB.DB[id]
-	var cat_name: String = {"consumable": "消耗品", "basic": "基础", "advanced": "进阶"}[it["cat"]]
+	var cat_name: String = CAT_NAMES.get(it["cat"], "")
 	var out := "[b][color=#ffd23f]%s[/color][/b]  [color=#8a92b8]%s[/color]   [color=#ffcc44]%d 金[/color]\n" % [it["name"], cat_name, int(it["cost"])]
 	var stv: Dictionary = it["stats"]
 	var parts := []
 	for k in stv:
 		var nm: String = STAT_NAMES.get(k, k)
 		if k == "range" and gm.player != null and bool(gm.player.def["melee"]):
-			nm += "（近战无效）"
+			nm += "（近战减半）"
 		parts.append(("+%s%s" if nm.begins_with("%") else "+%s %s") % [_num(float(stv[k])), nm])
 	if not parts.is_empty():
 		out += "[color=#c8f0ff]" + "   ".join(PackedStringArray(parts)) + "[/color]\n"
@@ -89,20 +89,13 @@ func _item_text(id: String, with_price: bool) -> String:
 	for k in spc:
 		var v = spc[k]
 		match k:
-			"crit": out += "[color=#ff8a7a]被动·暴击：%d%% 几率造成 %d%% 伤害[/color]\n" % [int(v[0] * 100), int(v[1] * 100)]
-			"chain": out += "[color=#8ad8ff]被动·连锁闪电：攻击有 %d%% 几率释放闪电，弹跳 %d 次，每次 %d 魔法伤害[/color]\n" % [int(v[0] * 100), int(v[1]), int(v[2])]
-			"deso": out += "[color=#ff8a7a]被动·腐蚀：攻击使目标护甲 -%d，持续 7 秒[/color]\n" % int(v)
-			"skadi": out += "[color=#8ad8ff]被动·霜冻：攻击使目标减速 %d%%，持续 %s 秒[/color]\n" % [int(v[0] * 100), _num(v[1])]
-			"mkb": out += "[color=#ffd23f]被动·必中：攻击无法被闪避，并有 %d%% 几率额外造成 %d 魔法伤害[/color]\n" % [int(v[0] * 100), int(v[1])]
-			"radiance": out += "[color=#ffb060]被动·灼烧：每秒对 %d 范围内的对手造成 %d 魔法伤害[/color]\n" % [int(v[1]), int(v[0])]
-			"ac_aura": out += "[color=#ffd23f]光环：900 范围内对手护甲 -%d[/color]\n" % int(v)
-			"shiva": out += "[color=#8ad8ff]光环：900 范围内对手攻击间隔 +%d%%[/color]\n" % int(v * 100)
-			"scepter": out += "[color=#6ab0ff]%s[/color]\n" % (str(gm.player.def["scepter_note"]) if gm.player != null else "")
-			"heart": out += "[color=#ff8a8a]被动：每秒额外恢复 %s%% 最大生命[/color]\n" % _num(v)
+			"scepter": out += "[color=#6ab0ff]%s[/color]\n" % (str(gm.player.def.get("scepter_note", "")) if gm.player != null else "")
+			"crit", "arc", "pierce", "armor_break", "grievous", "charge_fast", "tenacity", "spell_shield", "regen_ooc", "charge_move", "hurt_haste", "far_bonus", "heal_amp", "as_aura", "heart", "low_ls", "spell_vamp":
+				pass   # described by the item note (tools/gen_items.py)
 			"shard":
-				if gm.player != null: note = str(gm.player.def["shard_note"])
+				if gm.player != null: note = str(gm.player.def.get("shard_note", note))
 	if note != "":
-		out += "[color=#a0ffa0]%s[/color]\n" % note
+		out += "[color=#a0ffa0]被动：%s[/color]\n" % note if not spc.has("shard") else "[color=#a0ffa0]%s[/color]\n" % note
 	var comps: Array = it["comps"]
 	if not comps.is_empty() and gm.player != null:
 		var avail: Array = gm.player.inv.duplicate()
@@ -116,7 +109,7 @@ func _item_text(id: String, with_price: bool) -> String:
 			else:
 				cn.append("%s(%d)" % [nm2, int(ItemsDB.DB[c]["cost"])])
 		if int(it["recipe"]) > 0:
-			cn.append("卷轴(%d)" % int(it["recipe"]))
+			cn.append("升级(%d)" % int(it["recipe"]))
 		out += "[color=#b0b0c8]合成：[/color]" + " + ".join(PackedStringArray(cn)) + "\n"
 		if with_price:
 			var need := gm.shop_price_for(gm.player, id)
@@ -213,7 +206,7 @@ func _build_ui_v3() -> void:
 	title.text = "商店"
 	title.custom_minimum_size = Vector2(70, 0)
 	head.add_child(title)
-	for tab in [["consumable", "消耗品"], ["basic", "基础"], ["advanced", "进阶合成"]]:
+	for tab in [["basic", "基础"], ["advanced", "进阶"], ["ultimate", "终极"], ["upgrade", "英雄强化"]]:
 		var tb := _small_btn(tab[1], 96)
 		tb.pressed.connect(_set_shop_tab.bind(tab[0]))
 		head.add_child(tb)
@@ -297,8 +290,8 @@ func _refresh_shop() -> void:
 		var id: String = b.get_meta("id")
 		var price := gm.shop_price_for(gm.player, id)
 		var it: Dictionary = ItemsDB.DB[id]
-		var locked: bool = (it["special"].has("shard") and gm.player.shard_owned) or (it["special"].has("moon") and gm.player.moon_used)
-		(b as Button).text = ("已用" if locked else str(price))
+		var locked: bool = it["special"].has("shard") and gm.player.shard_owned
+		(b as Button).text = ("已装配" if locked else str(price))
 		(b as Button).modulate = Color(1, 1, 1) if (gm.player.gold >= price and not locked) else Color(0.5, 0.5, 0.55)
 	if shop_hover != "":
 		shop_detail.text = _item_text(shop_hover, true)
@@ -328,29 +321,24 @@ func _update_ui_v3(delta: float) -> void:
 	if gm.autopilot:
 		_refresh_inv()
 	var g := func(k: String) -> float: return float(p.ST.get(k, 0.0))
-	var bon := func(k: String) -> int: return int(round(float(p.ST.get(k, 0.0)) - float(p.ST.get(k + "_base", 0.0))))
-	var prim: String = p.def["primary"]
-	var star := {"str": "", "agi": "", "int": ""}
-	star[prim] = " ★"
-	var pname: String = {"str": "力量", "agi": "敏捷", "int": "智力"}[prim]
-	hd.attr_rt.text = "[color=#ff7a6a]力量%s[/color] %d [color=#6aff8a]+%d[/color]   [color=#6aff8a]敏捷%s[/color] %d [color=#6aff8a]+%d[/color]\n[color=#6ab0ff]智力%s[/color] %d [color=#6aff8a]+%d[/color]   [color=#8a92b8]（★ 主属性）[/color]\n攻击力 %d [color=#6aff8a]+%d[/color]    护甲 %.1f\n攻速 %d（%.2f 秒）  移速 %d\n魔抗 %d%%   吸血 %d%%   闪避 %d%%\n[color=#8a92b8]按 C 查看详细属性[/color]" % [
-		star["str"], int(p.ST.get("str_base", 0.0)), bon.call("str"), star["agi"], int(p.ST.get("agi_base", 0.0)), bon.call("agi"),
-		star["int"], int(p.ST.get("int_base", 0.0)), bon.call("int"),
-		int(g.call("dmg_base")), int(g.call("dmg_bonus")), g.call("armor"),
-		int(g.call("as")), p.atk_interval(), int(p.move_speed()),
-		int(round(g.call("mr") * 100.0)), int(round(g.call("ls") * 100.0)), int(round(g.call("eva") * 100.0))]
+	var dfp := func(x: float) -> int: return int(round((1.0 - gm.def_mult(x)) * 100.0))
+	hd.attr_rt.text = "攻击力 %d [color=#6aff8a]+%d[/color]   攻速 %d%%（%.2f 秒）\n物防 %d（减伤 %d%%）  法防 %d（减伤 %d%%）\n技能强度 %d%%   冷却缩减 %d%%\n移速 %d   吸血 %d%%\n[color=#8a92b8]按 C 查看详细属性[/color]" % [
+		int(g.call("dmg_base")), int(g.call("dmg_bonus")), int(g.call("as")), p.atk_interval(),
+		int(p.armor_val()), dfp.call(p.armor_val()), int(p.mr_val()), dfp.call(p.mr_val()),
+		int(round(g.call("pow") * 100.0)), int(round(g.call("cdr") * 100.0)),
+		int(p.move_speed()), int(round(g.call("ls") * 100.0))]
 	if hd.stats_panel.visible:
 		var crit: Array = p.sp().get("crit", [0.0, 1.0])
-		var gn: Dictionary = p.def["gain"]
-		hd.stats_rt.text = "[b][color=#ffd23f]%s[/color][/b]   [color=#8a92b8]主属性：%s（每点 +1 攻击力）[/color]\n\n[color=#ff7a6a]力量 %d[/color]  → 生命 +22/点，生命回复 +0.1/点\n[color=#6aff8a]敏捷 %d[/color]  → 攻速 +1/点，护甲 +0.17/点\n[color=#6ab0ff]智力 %d[/color]  → 魔法 +12/点，魔法回复 +0.05/点，魔抗 +0.1%%/点\n[color=#8a92b8]成长：力量 +%s / 敏捷 +%s / 智力 +%s 每级[/color]\n\n攻击力  %d + [color=#6aff8a]%d[/color]%s\n攻击速度  %d（攻击间隔 %.2f 秒，基础攻击间隔 %.1f）\n攻击距离  %d%s\n护甲  %.1f（物理伤害减免 %d%%）\n魔法抗性  %d%%\n移动速度  %d\n生命  %d    回复 %.1f / 秒\n魔法  %d    回复 %.1f / 秒\n吸血  %d%%    闪避  %d%%\n技能增强  %d%%    冷却缩减  %d%%\n施法距离加成  +%d\n暴击  %s" % [
-			p.def["name"], pname,
-			int(g.call("str")), int(g.call("agi")), int(g.call("int")),
-			_num(gn["str"]), _num(gn["agi"]), _num(gn["int"]),
+		var upg := []
+		if p.shard_owned: upg.append("特化芯片")
+		if p.has_scepter(): upg.append("终极协议")
+		hd.stats_rt.text = "[b][color=#ffd23f]%s[/color][/b]   [color=#8a92b8]英雄面板固定，属性全部来自装备与符文；升级只获得技能点[/color]\n\n攻击力  %d + [color=#6aff8a]%d[/color]%s\n攻击速度  %d%%（攻击间隔 %.2f 秒，英雄基础 %.2f 秒）\n攻击距离  %d%s    弹道速度  %d    视野  %d\n物理防御  %d（物理减伤 %d%%）\n法术防御  %d（法术减伤 %d%%）\n移动速度  %d\n生命  %d    回复 %.1f / 秒\n法力  %d    回复 %.1f / 秒\n技能强度  %d%%    冷却缩减  %d%%    吸血  %d%%\n暴击  %s\n英雄强化  %s" % [
+			p.def["name"],
 			int(g.call("dmg_base")), int(g.call("dmg_bonus")), ("  [color=#ffd23f](双倍伤害神符)[/color]" if p.dd_t > 0.0 else ""),
-			int(g.call("as")), p.atk_interval(), float(p.def["bat"]), int(p.atk_range()), ("（近战）" if bool(p.def["melee"]) else ""),
-			g.call("armor"), int(round((1.0 - gm.armor_mult(g.call("armor"))) * 100.0)),
-			int(round(g.call("mr") * 100.0)), int(p.move_speed()),
+			int(g.call("as")), p.atk_interval(), float(p.def["stats"]["interval"]), int(p.atk_range()), ("（近战）" if bool(p.def["melee"]) else ""),
+			int(p.proj_speed()), int(g.call("vision")),
+			int(p.armor_val()), dfp.call(p.armor_val()), int(p.mr_val()), dfp.call(p.mr_val()), int(p.move_speed()),
 			int(p.max_hp), p.hp_regen(), int(p.mana_max), p.mp_regen(),
-			int(round(g.call("ls") * 100.0)), int(round(g.call("eva") * 100.0)),
-			int(round(g.call("amp") * 100.0)), int(round(g.call("cdr") * 100.0)), int(g.call("cast")),
-			("%d%% 几率 ×%s" % [int(crit[0] * 100), _num(crit[1])]) if crit[0] > 0.0 else "无"]
+			int(round(g.call("pow") * 100.0)), int(round(g.call("cdr") * 100.0)), int(round(g.call("ls") * 100.0)),
+			("%d%% 几率 ×%s" % [int(crit[0] * 100), _num(crit[1])]) if crit[0] > 0.0 else "无",
+			"、".join(PackedStringArray(upg)) if not upg.is_empty() else "无"]

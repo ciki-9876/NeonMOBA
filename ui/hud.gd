@@ -174,7 +174,6 @@ func _build_ui() -> void:
 	var keys := ["w", "q", "e", "r"]
 	for i in 4:
 		_make_slot(root, keys[i], Vector2(92 + i * 112, 22), 72)
-	_make_slot(root, "attr", Vector2(560, 34), 48)
 	var hp_back := ColorRect.new()
 	hp_back.position = Vector2(8, 106)
 	hp_back.size = Vector2(628, 16)
@@ -306,8 +305,6 @@ func _setup_hud() -> void:
 			(sl["icon"] as TextureRect).texture = gm.TEX[icons[key]]
 			n = int(gm.player.sdef[key]["max"])
 			(sl["box"] as Control).tooltip_text = str(gm.player.kit.tip(key))
-		else:
-			(sl["box"] as Control).tooltip_text = "属性加成（最多 10 级）\n每级：力量、敏捷、智力各 +2。\nCtrl+O 学习"
 		var pips := sl["pips"] as HBoxContainer
 		for c in pips.get_children():
 			pips.remove_child(c)
@@ -461,7 +458,7 @@ func _update_fx_ui(delta: float) -> void:
 		var arm: float = sel.armor_val()
 		if sel.is_hero:
 			sel_name.text = "%s  Lv.%d  %s" % [sel.display_name(), sel.level, ("（队友）" if sel.team == p.team else "（对方）")]
-			sel_hp.text = "生命 %d / %d%s\n护甲 %.1f（物理减伤 %d%%）   魔抗 %d%%\n%d / %d / %d   攻击力 %d" % [int(sel.hp), int(sel.max_hp), extra, arm, int(round((1.0 - gm.armor_mult(arm)) * 100.0)), int(round(sel.mr_val() * 100.0)), sel.kills, sel.deaths, sel.assists, int(sel.atk_dmg())]
+			sel_hp.text = "生命 %d / %d%s\n物防 %d（减伤 %d%%）   法防 %d（减伤 %d%%）\n%d / %d / %d   攻击力 %d" % [int(sel.hp), int(sel.max_hp), extra, int(arm), int(round((1.0 - gm.def_mult(arm)) * 100.0)), int(sel.mr_val()), int(round((1.0 - gm.def_mult(sel.mr_val())) * 100.0)), sel.kills, sel.deaths, sel.assists, int(sel.atk_dmg())]
 			var names := []
 			for id in sel.inv:
 				names.append(ItemsDB.DB[id]["name"])

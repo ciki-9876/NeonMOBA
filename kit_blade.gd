@@ -33,7 +33,7 @@ func cd_reduction(s: String) -> float:
 
 func cast_range(s: String, _tgt) -> float:
 	if s == "r":
-		return float(h.sdef["r"]["range"]) + float(h.ST.get("cast", 0.0))
+		return float(h.sdef["r"]["range"])
 	return 0.0
 
 ## R needs somebody to slash near the aim point
@@ -79,7 +79,7 @@ func cast(s: String, _tgt, pos: Vector2, _chg := 0.0) -> void:
 # ------------------------------------------------------------ right-click: 瞬影斩
 func _cast_dash(pos: Vector2) -> void:
 	var from: Vector2 = h.position
-	var maxd: float = sval("w", "dist") + float(h.ST.get("cast", 0.0))
+	var maxd: float = sval("w", "dist")
 	var dir: Vector2 = (pos - from).normalized()
 	if dir == Vector2.ZERO:
 		dir = Vector2.from_angle(h.face)

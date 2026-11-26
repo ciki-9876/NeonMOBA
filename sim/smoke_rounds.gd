@@ -29,7 +29,22 @@ func _process(_d: float) -> bool:
 		12: key(KEY_F6)
 		20: key(KEY_B)
 		25: main.shp._buy("boots")
-		30: main.shp._sell(0)
+		26:
+			for tab in ["basic", "advanced", "ultimate", "upgrade"]:
+				main.shp._set_shop_tab(tab)
+			for id in main.gm.ItemsDB.ORDER:
+				main.shp._shop_hover_set(str(id))
+		27:
+			gm.player.gold += 9000.0
+			main.shp._buy("chipx")
+			main.shp._buy("protocol")
+			main.shp._buy("chipx")   # second fitting must be refused
+			print("upgrades shard=%s scepter=%s inv=%s" % [gm.player.shard_owned, gm.player.has_scepter(), gm.player.inv])
+		28: key(KEY_C)
+		29: key(KEY_C)
+		30:
+			main.shp._sell(1)
+			main.shp._sell(0)
 		35: key(KEY_B)
 		40: key(KEY_TAB)
 		60: key(KEY_TAB)

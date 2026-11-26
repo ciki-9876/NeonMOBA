@@ -23,7 +23,7 @@ func cd_reduction(s: String) -> float:
 
 func cast_range(s: String, _tgt) -> float:
 	if s == "r":
-		return float(h.sdef["r"]["range"]) + float(h.ST.get("cast", 0.0))
+		return float(h.sdef["r"]["range"])
 	return 0.0
 
 func skill_radius(s: String) -> float:
@@ -35,7 +35,7 @@ func r_radius() -> float:
 	return float(h.sdef["r"]["radius"]) + (100.0 if h.has_scepter() else 0.0)
 
 func blink_dist() -> float:
-	return h.sv("q", "dist") + float(h.ST.get("cast", 0.0))
+	return h.sv("q", "dist")
 
 func est_damage(s: String) -> float:
 	match s:

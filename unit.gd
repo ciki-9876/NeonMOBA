@@ -10,11 +10,13 @@ extends Node2D
 ##   dr       damage reduction (v = 0..1)
 ##   haste    move speed bonus (v = fraction)
 ##   as       attack speed bonus (flat)
-##   armor    armor bonus (flat)
+##   def      physical defense bonus (flat)
+##   res      magic resist bonus (flat)
+##   grievous incoming heals and shields reduced (v = 0..1)
 ##   regen    hp regen bonus (per second)
 ## barrier / barrier_t : a damage-absorbing shield
 
-const NEGATIVE := ["root", "taunt"]
+const NEGATIVE := ["root", "taunt", "grievous"]
 
 var team := 1
 ## deterministic id inside the current match (assigned by game/match.gd). Use it instead of
@@ -38,10 +40,10 @@ var slow := 0.0
 var slow_pct := 0.4
 var silence := 0.0
 var invuln := 0.0         # untargetable + immune (e.g. during 千刃)
-var deso_t := 0.0
-var deso_v := 0.0
-var ac_v := 0.0           # armor removed by an enemy 强袭 aura this frame
-var shiva_v := 0.0        # attack-interval penalty from an enemy 希瓦 aura this frame
+var deso_t := 0.0         # 破甲钻头 armor break: time left
+var deso_v := 0.0         # 破甲钻头 armor break: defense removed
+var ac_v := 0.0           # defense removed by an enemy aura this frame (unused by current items)
+var shiva_v := 0.0        # attack-interval penalty from an enemy 永冻之心 aura this frame
 var charged := 0.0        # 霓虹 kit: 感电
 var mark := 0.0           # 绯刃 kit: 血印
 var mark_src: Object = null
@@ -59,12 +61,12 @@ var pull := Vector2.ZERO
 var base_col := Color.WHITE
 
 func armor_val() -> float:
-	var a := armor + buff_v("armor")
+	var a := armor + buff_v("def")
 	if deso_t > 0.0: a -= deso_v
 	return a - ac_v
 
 func mr_val() -> float:
-	return clampf(mr, 0.0, 0.9)
+	return mr + buff_v("res")
 
 func targetable() -> bool:
 	return not dead and invuln <= 0.0 and not buffs.has("banish")
@@ -107,6 +109,7 @@ func buff_src(id: String) -> Object:
 	return s
 
 func add_barrier(amount: float, dur: float) -> void:
+	amount *= 1.0 - buff_v("grievous")
 	if barrier_t <= 0.0:
 		barrier = 0.0
 	barrier = maxf(barrier, amount)
@@ -128,10 +131,15 @@ func cleanse(strong: bool) -> void:
 	if strong:
 		stun = 0.0
 
+## 0..1: crowd control on this unit wears off this much faster in time (反应装甲 韧性)
+func tenacity() -> float:
+	return 0.0
+
 func tick_status(d: float) -> void:
-	stun = maxf(0.0, stun - d)
-	slow = maxf(0.0, slow - d)
-	silence = maxf(0.0, silence - d)
+	var cc_d := d / maxf(0.2, 1.0 - tenacity())
+	stun = maxf(0.0, stun - cc_d)
+	slow = maxf(0.0, slow - cc_d)
+	silence = maxf(0.0, silence - cc_d)
 	invuln = maxf(0.0, invuln - d)
 	deso_t = maxf(0.0, deso_t - d)
 	charged = maxf(0.0, charged - d)
@@ -146,7 +154,7 @@ func tick_status(d: float) -> void:
 		var gone := []
 		for id in buffs:
 			var b: Dictionary = buffs[id]
-			b["t"] = float(b["t"]) - d
+			b["t"] = float(b["t"]) - (cc_d if NEGATIVE.has(id) else d)
 			if float(b["t"]) <= 0.0:
 				gone.append(id)
 		for id in gone:

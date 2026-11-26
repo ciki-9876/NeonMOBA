@@ -22,17 +22,17 @@ var regen_bonus := 0.0
 var level := 1
 var xp := 0.0
 var skill_points := 1
-var sk := {"q": 0, "w": 0, "e": 0, "r": 0, "attr": 0}
+var sk := {"q": 0, "w": 0, "e": 0, "r": 0}
 var cds := {"q": 0.0, "w": 0.0, "e": 0.0, "r": 0.0}
 var mana := 0.0
 var mana_max := 1.0
 var ST := {}
 var inv: Array = []
 var gold := 600.0
-var moon_used := false
 var shard_owned := false
+var arc_n := 0               # attacks counted toward the next item chain arc
+var spell_shield_used := false   # 屏障发生器: once per round
 var regen_buffs: Array = []
-var radiance_t := 0.0
 var haste_t := 0.0
 var dd_t := 0.0
 var ms_buff_t := 0.0
@@ -127,13 +127,12 @@ func reset_full() -> void:
 	level = 1
 	xp = 0.0
 	skill_points = 1
-	sk = {"q": 0, "w": 0, "e": 0, "r": 0, "attr": 0}
+	sk = {"q": 0, "w": 0, "e": 0, "r": 0}
 	if is_c3():
 		sk["w"] = 1   # the right-click skill is never levelled: it is there from the start and scales with attributes
 	cds = {"q": 0.0, "w": 0.0, "e": 0.0, "r": 0.0}
 	inv = []
 	gold = 600.0
-	moon_used = false
 	shard_owned = false
 	regen_buffs = []
 	kills = 0
@@ -174,12 +173,17 @@ func _reset_state() -> void:
 	barrier = 0.0
 	barrier_t = 0.0
 	recoil = 0.0
+	arc_n = 0
+	spell_shield_used = false
 	if trail:
 		trail.clear_points()
 
 # ============================================================ stats
 func hp_regen() -> float:
 	var v: float = float(ST.get("hpr", 2.0)) + buff_v("regen")
+	var ooc: float = float(sp().get("regen_ooc", 1.0))
+	if ooc > 1.0 and g != null and g.t - last_hurt > 3.0:
+		v *= ooc
 	for b in regen_buffs:
 		v += float(b.get("hp", 0.0))
 	return v
@@ -201,7 +205,7 @@ func as_bonus() -> float:
 	return atk_rate() - 1.0
 
 func atk_interval() -> float:
-	return float(def["bat"]) / atk_rate() * (1.0 + shiva_v)
+	return float(def["stats"]["interval"]) / atk_rate() * (1.0 + shiva_v)
 
 func atk_range() -> float:
 	return float(ST.get("range", def["range"]))
@@ -211,26 +215,34 @@ func move_speed() -> float:
 	if ms_buff_t > 0.0:
 		ms *= 1.0 + ms_buff_pct
 	ms *= 1.0 + buff_v("haste")
+	var hh: Array = sp().get("hurt_haste", [])
+	if not hh.is_empty() and g != null and g.t - last_hurt < float(hh[1]):
+		ms *= 1.0 + float(hh[0])
 	if haste_t > 0.0:
 		ms = 550.0
 	if slow > 0.0:
 		ms *= 1.0 - slow_pct
 	return minf(ms, 550.0)
 
+## physical defense right now (buffs, 破甲 debuff)
 func armor_val() -> float:
-	var a: float = float(ST.get("armor", 0.0)) + buff_v("armor")
+	var a: float = float(ST.get("def", 0.0)) + buff_v("def")
 	if deso_t > 0.0:
 		a -= deso_v
 	return a - ac_v
 
+## magic resist points right now
 func mr_val() -> float:
-	return float(ST.get("mr", 0.25))
+	return float(ST.get("res", 0.0)) + buff_v("res")
 
 func sp() -> Dictionary:
 	return ST.get("sp", {})
 
 func has_scepter() -> bool:
-	return bool(sp().get("scepter", false))
+	for id in inv:
+		if (ItemsDB.DB[id]["special"] as Dictionary).has("scepter"):
+			return true
+	return false
 
 func sv(s: String, key: String) -> float:
 	var lv: int = int(sk.get(s, 0))
@@ -246,90 +258,88 @@ func skill_cd(s: String) -> float:
 	var c: float = sv(s, "cd") - float(kit.cd_reduction(s))
 	return maxf(0.5, c * (1.0 - float(ST.get("cdr", 0.0))))
 
-func armor_mult(a: float) -> float:
-	return 1.0 - (0.06 * a) / (1.0 + 0.06 * absf(a))
+## fraction of damage that gets through x points of def / res: 100 / (100 + x); negative values amplify
+func def_mult(x: float) -> float:
+	return 100.0 / (100.0 + x) if x >= 0.0 else 2.0 - 100.0 / (100.0 - x)
 
+## kept for old callers (team AI threat estimates): same curve as def_mult
+func armor_mult(a: float) -> float:
+	return def_mult(a)
+
+## stat keys an item / rune may add (design: docs/design/属性与装备迭代设计案.md)
+const STAT_KEYS := ["hp", "hpr", "mana", "mpr", "atk", "as", "def", "res", "ms", "range", "pspd", "vision", "ls", "pow", "cdr"]
+## old rune keys still accepted
+const STAT_ALIAS := {"dmg": "atk", "armor": "def", "amp": "pow", "mr": "res"}
+
+## Fixed hero panel (def["stats"]) + items + runes + passives. Levels only give skill points.
 func recalc() -> void:
+	_sync_skill_mods()
 	var hp_frac := 1.0
 	var mp_frac := 1.0
 	if ST.has("hp_max"):
 		hp_frac = clampf(hp / max_hp, 0.0, 1.0)
 		mp_frac = clampf(mana / mana_max, 0.0, 1.0)
-	var b := {"str": 0.0, "agi": 0.0, "int": 0.0, "dmg": 0.0, "as": 0.0, "armor": 0.0, "ms": 0.0, "ms_pct": 0.0,
-		"hp": 0.0, "mana": 0.0, "hpr": 0.0, "mpr": 0.0, "ls": 0.0, "amp": 0.0, "cast": 0.0, "range": 0.0,
-		"pspd": 0.0, "vision": 0.0}
-	var mr_keep := 1.0
-	var eva_keep := 1.0
+	var b := {}
+	for k in STAT_KEYS:
+		b[k] = 0.0
 	var cdr_keep := 1.0
-	var spx := {"crit": [0.0, 1.0], "chain": [], "deso": 0.0, "skadi": [], "mkb": [], "radiance": [], "ac_aura": 0.0, "shiva": 0.0, "scepter": false, "heart": 0.0}
-	for k in mods_stats:
+	var spx := {"crit": [0.0, 1.0], "arc": [], "pierce": 0, "armor_break": [], "grievous": [], "charge_fast": 0.0,
+		"tenacity": 0.0, "spell_shield": 0.0, "regen_ooc": 1.0, "charge_move": 1.0, "hurt_haste": [], "far_bonus": 0.0,
+		"heal_amp": 0.0, "as_aura": [], "heart": 0.0, "low_ls": 0.0, "spell_vamp": 0.0, "scepter": false}
+	for k0 in mods_stats:
+		var k: String = STAT_ALIAS.get(k0, k0)
 		if k == "cdr":
-			cdr_keep *= 1.0 - float(mods_stats[k]) / 100.0
+			cdr_keep *= 1.0 - float(mods_stats[k0]) / 100.0
 		elif b.has(k):
-			b[k] += float(mods_stats[k])
+			b[k] += float(mods_stats[k0])
 	for id in inv:
 		var it: Dictionary = ItemsDB.DB[id]
 		var stv: Dictionary = it["stats"]
 		for k in stv:
-			var v := float(stv[k])
-			match k:
-				"all":
-					b["str"] += v
-					b["agi"] += v
-					b["int"] += v
-				"mr": mr_keep *= 1.0 - v / 100.0
-				"eva": eva_keep *= 1.0 - v / 100.0
-				"cdr": cdr_keep *= 1.0 - v / 100.0
-				_: b[k] += v
+			if k == "cdr":
+				cdr_keep *= 1.0 - float(stv[k]) / 100.0
+			elif b.has(k):
+				b[k] += float(stv[k])
 		var spc: Dictionary = it["special"]
 		for k in spc:
 			match k:
 				"crit":
-					if spc[k][1] > spx["crit"][1]: spx["crit"] = spc[k]
-				"chain":
-					if spx["chain"].is_empty() or spc[k][2] > spx["chain"][2]: spx["chain"] = spc[k]
-				"deso": spx["deso"] = maxf(spx["deso"], spc[k])
-				"skadi": spx["skadi"] = spc[k]
-				"mkb": spx["mkb"] = spc[k]
-				"radiance": spx["radiance"] = spc[k]
-				"ac_aura": spx["ac_aura"] = maxf(spx["ac_aura"], spc[k])
-				"shiva": spx["shiva"] = maxf(spx["shiva"], spc[k])
+					if float(spc[k][1]) > float(spx["crit"][1]): spx["crit"] = spc[k]
+				"arc":
+					if spx["arc"].is_empty() or int(spc[k][1]) > int(spx["arc"][1]): spx["arc"] = spc[k]
+				"armor_break", "grievous", "hurt_haste", "as_aura":
+					if spx[k].is_empty() or float(spc[k][0]) > float(spx[k][0]): spx[k] = spc[k]
+				"pierce": spx["pierce"] = maxi(int(spx["pierce"]), int(spc[k]))
+				"regen_ooc": spx["regen_ooc"] = maxf(float(spx["regen_ooc"]), float(spc[k]))
+				"charge_move": spx["charge_move"] = minf(float(spx["charge_move"]), float(spc[k]))
 				"scepter": spx["scepter"] = true
-				"heart": spx["heart"] = maxf(spx["heart"], spc[k])
-	var base: Dictionary = def["base"]
-	var gain: Dictionary = def["gain"]
-	var lv := float(level - 1)
-	var bs := 2.0 * float(sk["attr"])
+				"shard": pass
+				_:
+					if spx.has(k): spx[k] = maxf(float(spx[k]), float(spc[k]))
+	var base: Dictionary = def["stats"]
+	var melee: bool = bool(def["melee"])
 	var n := {}
-	for a in ["str", "agi", "int"]:
-		var bv: float = float(base[a]) + float(gain[a]) * lv
-		n[a + "_base"] = bv
-		n[a] = bv + bs + float(b[a])
-	var STR: float = n["str"]
-	var AGI: float = n["agi"]
-	var INT: float = n["int"]
-	var prim: String = def["primary"]
-	n["dmg_base"] = float(def["base_dmg"]) + float(n[prim])
-	n["dmg_bonus"] = b["dmg"]
-	n["as"] = 100.0 + AGI + b["as"] + (60.0 if moon_used else 0.0)
-	n["armor"] = float(def["armor"]) + AGI / 6.0 + b["armor"]
-	n["mr"] = 1.0 - (1.0 - 0.25) * (1.0 - INT * 0.001) * mr_keep
-	n["ms"] = (float(def["ms"]) + b["ms"]) * (1.0 + b["ms_pct"] / 100.0)
-	n["hp_max"] = (200.0 + STR * 22.0 + b["hp"]) * hp_mult
-	n["mana_max"] = 75.0 + INT * 12.0 + b["mana"]
-	n["hpr"] = 1.0 + regen_bonus + STR * 0.1 + b["hpr"] + n["hp_max"] * spx["heart"] / 100.0
-	n["mpr"] = 0.5 + INT * 0.05 + b["mpr"]
+	n["dmg_base"] = float(base["atk"])
+	n["dmg_bonus"] = b["atk"]
+	n["as"] = 100.0 + b["as"]        # percent of the hero's own attack rate (100 = base interval)
+	n["def"] = float(base["def"]) + b["def"]
+	n["res"] = float(base["res"]) + b["res"]
+	n["ms"] = float(base["ms"]) + b["ms"]
+	n["hp_max"] = (float(base["hp"]) + b["hp"]) * hp_mult
+	n["mana_max"] = float(base["mana"]) + b["mana"]
+	n["hpr"] = float(base["hpr"]) + regen_bonus + b["hpr"]
+	n["mpr"] = float(base["mpr"]) + b["mpr"]
 	n["ls"] = b["ls"] / 100.0
-	n["eva"] = 1.0 - eva_keep
-	n["amp"] = b["amp"] / 100.0
+	n["pow"] = b["pow"] / 100.0
 	n["cdr"] = 1.0 - cdr_keep
-	n["cast"] = b["cast"]
-	# melee heroes get half of any attack range bonus (it widens the swing arc)
-	n["range"] = float(def["range"]) + b["range"] * (0.5 if bool(def["melee"]) else 1.0)
+	# melee heroes get half of any attack range bonus (it widens the swing radius)
+	n["range"] = float(def["range"]) + b["range"] * (0.5 if melee else 1.0)
 	n["pspd"] = float(def.get("proj_speed", 1100.0)) + b["pspd"]
 	n["vision"] = float(def.get("vision", 900.0)) + b["vision"]
+	n["arc"] = float(def.get("arc", 0.0)) + (20.0 if melee and int(spx["pierce"]) > 0 else 0.0)
 	n["sp"] = spx
 	kit.stat_mods(n)
+	n["hpr"] = float(n["hpr"]) + float(n["hp_max"]) * float(spx["heart"]) / 100.0
 	n["as"] = clampf(float(n["as"]), 20.0, 700.0)
 	n["ms"] = minf(550.0, float(n["ms"]))
 	ST = n
@@ -337,6 +347,17 @@ func recalc() -> void:
 	mana_max = float(n["mana_max"])
 	hp = max_hp * hp_frac
 	mana = mana_max * mp_frac
+
+func tenacity() -> float:
+	return float(sp().get("tenacity", 0.0))
+
+## outgoing skill heals and shields: skill power and 支援信标
+func support_mult() -> float:
+	return pow_mult() * (1.0 + float(sp().get("heal_amp", 0.0)))
+
+## skill power multiplier for skill damage, heals and shields
+func pow_mult() -> float:
+	return 1.0 + float(ST.get("pow", 0.0))
 
 # ============================================================ levels & skills
 func xp_need() -> float:
@@ -362,8 +383,6 @@ func can_learn(s: String) -> bool:
 		return false
 	if s == "w" and is_c3():
 		return false
-	if s == "attr":
-		return int(sk["attr"]) < 10
 	var lv: int = int(sk[s])
 	var mx: int = int(sdef[s]["max"])
 	if s == "r":
@@ -526,7 +545,7 @@ func _update_charge(d: float) -> void:
 		charge = 0.0
 		return
 	var cfg := charge_cfg()
-	charge = minf(1.0, charge + d / maxf(0.05, float(cfg.get("time", 1.0))))
+	charge = minf(1.0, charge + d / maxf(0.05, float(cfg.get("time", 1.0)) * (1.0 - float(sp().get("charge_fast", 0.0)))))
 	if not ctl_hold:
 		var s := charging
 		var c := charge
@@ -554,7 +573,7 @@ func _control(d: float) -> void:
 	if mv.length() > 0.01 and not has_buff("root"):
 		var spd := move_speed()
 		if charging != "":
-			spd *= float(charge_cfg().get("move", 0.5))
+			spd *= 1.0 - (1.0 - float(charge_cfg().get("move", 0.5))) * float(sp().get("charge_move", 1.0))
 		position = g.clamp_pos(position + mv * spd * d, radius)
 	var want: bool = tt != null or (ctl_fire and charging == "")
 	_update_attack(d, aim, want)
@@ -584,7 +603,7 @@ func melee_reach() -> float:
 	return atk_range()
 
 func melee_arc() -> float:
-	return deg_to_rad(float(def.get("arc", 100.0)))
+	return deg_to_rad(float(ST.get("arc", def.get("arc", 100.0))))
 
 func proj_speed() -> float:
 	return float(ST.get("pspd", def.get("proj_speed", 1100.0)))
@@ -623,6 +642,8 @@ func attack_hit(tgt, base: float, info: Dictionary) -> void:
 		return
 	var spx := sp()
 	var dmg: float = base + float(info.get("bonus", 0.0))
+	if bool(info.get("far", false)):
+		dmg *= 1.0 + float(spx.get("far_bonus", 0.0))
 	var kind := "attack"
 	var crit: Array = spx.get("crit", [0.0, 1.0])
 	if float(crit[0]) > 0.0 and g.rng.randf() < float(crit[0]):
@@ -633,22 +654,22 @@ func attack_hit(tgt, base: float, info: Dictionary) -> void:
 	if dealt <= 0.0:
 		return
 	var ls: float = float(ST.get("ls", 0.0)) + float(info.get("ls", 0.0))
+	if ls > 0.0 and hp < max_hp * float(spx.get("low_ls", 0.0)):
+		ls *= 2.0   # 嗜血狂刃
 	if ls > 0.0:
-		hp = minf(max_hp, hp + dealt * ls)
-	if not tgt.dead:
-		if float(spx.get("deso", 0.0)) > 0.0:
-			tgt.deso_t = 7.0
-			tgt.deso_v = float(spx["deso"])
-		var skd: Array = spx.get("skadi", [])
-		if not skd.is_empty():
-			tgt.slow = maxf(tgt.slow, float(skd[1]))
-			tgt.slow_pct = float(skd[0])
-		var mkb: Array = spx.get("mkb", [])
-		if not mkb.is_empty() and g.rng.randf() < float(mkb[0]):
-			g.damage(self, tgt, float(mkb[1]), "proc", "magic")
-	var ch: Array = spx.get("chain", [])
-	if not ch.is_empty() and g.rng.randf() < float(ch[0]):
-		g.item_chain(self, tgt, int(ch[1]), float(ch[2]))
+		g.heal(null, self, dealt * ls)
+	var ab: Array = spx.get("armor_break", [])
+	if not tgt.dead and not ab.is_empty():
+		tgt.deso_t = float(ab[1])
+		tgt.deso_v = float(ab[0])
+	# 超载线圈 / 风暴核心: every Nth attack (one count per swing or bolt) releases a chain arc
+	var arc: Array = spx.get("arc", [])
+	if not arc.is_empty() and not info.has("arc_counted"):
+		info["arc_counted"] = true
+		arc_n += 1
+		if arc_n >= int(arc[0]):
+			arc_n = 0
+			g.item_chain(self, tgt, int(arc[1]), float(arc[2]))
 	kit.on_attack_hit(tgt, info)
 
 ## next point to walk toward on the way to p: straight when the line is clear, otherwise the path
@@ -685,13 +706,6 @@ func update(d: float) -> void:
 		if float(bf["t"]) > 0.0:
 			keep_b.append(bf)
 	regen_buffs = keep_b
-	var rad: Array = sp().get("radiance", [])
-	if not rad.is_empty():
-		radiance_t -= d
-		if radiance_t <= 0.0:
-			radiance_t = 1.0
-			for u in g.foes_in(team, position, float(rad[1])):
-				g.damage(self, u, float(rad[0]), "dot", "magic")
 	if knock != Vector2.ZERO or pull != Vector2.ZERO:
 		position = g.clamp_pos(position + (knock + pull) * d, radius)
 		knock = knock.move_toward(Vector2.ZERO, 1200.0 * d)
@@ -791,11 +805,39 @@ func _visuals(d: float) -> void:
 func apply_mods(mods: Array) -> void:
 	if mods.is_empty():
 		return
-	sdef = sdef.duplicate(true)   # never patch the shared HeroesDB definition
+	rune_mods = mods.duplicate()
+	mods_stats = {}
 	for m in mods:
-		match str(m["type"]):
-			"stat":
-				mods_stats[m["key"]] = float(mods_stats.get(m["key"], 0.0)) + float(m["v"])
+		if str(m["type"]) == "stat":
+			mods_stats[m["key"]] = float(mods_stats.get(m["key"], 0.0)) + float(m["v"])
+	_upg_state = "?"
+	recalc()
+
+## hero upgrades (特化芯片 -> def["shard"], 终极协议 -> def["scepter"]) use the same mod format as runes.
+## sdef = the shared HeroesDB skills, patched by rune mods and owned upgrades (rebuilt when they change)
+var rune_mods: Array = []
+var _upg_state := ""
+
+func _sync_skill_mods() -> void:
+	var state := "%s%s" % [shard_owned, has_scepter()]
+	if state == _upg_state:
+		return
+	_upg_state = state
+	var mods: Array = rune_mods.duplicate()
+	if shard_owned:
+		mods.append_array(def.get("shard", []))
+	if has_scepter():
+		mods.append_array(def.get("scepter", []))
+	sdef = def["skills"]
+	var touched := false
+	for m in mods:
+		var ty := str(m["type"])
+		if ty == "stat":
+			continue
+		if not touched:
+			sdef = sdef.duplicate(true)   # never patch the shared HeroesDB definition
+			touched = true
+		match ty:
 			"skill":
 				var st: Dictionary = sdef[m["skill"]]
 				if m.has("op"):
@@ -808,7 +850,6 @@ func apply_mods(mods: Array) -> void:
 					st2["effects"].append((m["effect"] as Dictionary).duplicate(true))
 	if "_meta_cache" in kit:
 		kit._meta_cache = {}
-	recalc()
 
 func _patch_effects(effects: Array, op: String, key: String, m: Dictionary) -> void:
 	for e in effects:
@@ -819,6 +860,10 @@ func _patch_effects(effects: Array, op: String, key: String, m: Dictionary) -> v
 				_patch_effects(e[sub], op, key, m)
 
 func _patch_value(v, m: Dictionary):
+	if v is Dictionary:
+		var dct: Dictionary = (v as Dictionary).duplicate(true)
+		dct["v"] = _patch_value(dct.get("v", 0.0), m)
+		return dct
 	if v is Array:
 		var out := []
 		for x in v:

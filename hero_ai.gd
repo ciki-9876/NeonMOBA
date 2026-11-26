@@ -265,7 +265,7 @@ func _roles(s: String) -> Array:
 
 func _reach(s: String) -> float:
 	var st: Dictionary = h.sdef[s]
-	var cast_bonus: float = float(h.ST.get("cast", 0.0))
+	var cast_bonus := 0.0
 	var m := meta(s)
 	if float(m.get("reach", 0.0)) > 0.0:
 		return float(m["reach"])
@@ -711,13 +711,13 @@ func _learn() -> void:
 			if h.learn(str(s)):
 				done = true
 				break
-		if not done and not h.learn("attr"):
+		if not done:
 			break
 
-## items that answer a damage type (round mode counter-building); per role: [tank, others]
-const COUNTERS := {"phys": ["platemail", "chainmail"], "magic": ["cloak", "cloak"]}
-const ARMOR_ITEMS := ["protect", "chainmail", "platemail", "phase", "ac", "shiva", "wraith"]
-const MR_ITEMS := ["cloak"]
+## items that answer what hurts us (round mode counter-building); per role: [tank, others]
+const COUNTERS := {"phys": ["reactive", "plate"], "magic": ["barrier", "coat"], "heal": ["drill", "wound"], "tanky": ["drill", "drill"]}
+const ARMOR_ITEMS := ["plate", "reactive", "tboots", "drill", "permafrost"]
+const MR_ITEMS := ["coat", "barrier", "permafrost"]
 ## 1 = adapts its build to the opponent after a lost round (tuning: --ai_b adapt=0 turns it off)
 var adapt := 1.0
 var _cover_end := -1.0      # cover is a short break of line of sight per retreat, not a place to camp
@@ -726,18 +726,59 @@ func _shop() -> void:
 	if g.rounds != null:
 		_shop_rounds()
 		return
-	var build: Array = h.def["build"]
+	_buy_next(h.def["build"])
+
+## does the hero own id, or an item built from it? (特化芯片 counts once fitted)
+func _owns(id: String) -> bool:
+	if g.is_consumed_item(id):
+		return h.shard_owned
+	for x in h.inv:
+		if _contains(str(x), id):
+			return true
+	return false
+
+func _contains(x: String, id: String) -> bool:
+	if x == id:
+		return true
+	for c in ItemsDB.DB[x]["comps"]:
+		if _contains(str(c), id):
+			return true
+	return false
+
+## the priciest component of id that is not owned yet and fits in the budget ("" = none)
+func _affordable_part(id: String, budget: float) -> String:
+	var best := ""
+	var best_c := -1.0
+	for c in ItemsDB.DB[id]["comps"]:
+		var cid: String = str(c)
+		if _owns(cid):
+			continue
+		var p := float(g.shop_price_for(h, cid))
+		if p <= budget and p > best_c:
+			best = cid
+			best_c = p
+		var sub := _affordable_part(cid, budget)
+		if sub != "" and float(g.shop_price_for(h, sub)) > best_c:
+			best = sub
+			best_c = float(g.shop_price_for(h, sub))
+	return best
+
+## buys toward the first build item not owned yet: the whole item when affordable, otherwise its priciest
+## affordable component. Returns true if something was bought.
+func _buy_next(build: Array) -> bool:
 	for id in build:
 		var sid: String = str(id)
-		if h.inv.has(sid):
+		if _owns(sid):
 			continue
-		var price: int = g.shop_price_for(h, sid)
-		if h.gold < float(price):
-			return
-		if g.inv_after(h, sid) > 6:
+		var pick := sid
+		if h.gold < float(g.shop_price_for(h, sid)):
+			pick = _affordable_part(sid, h.gold)
+			if pick == "":
+				return false
+		if not g.is_consumed_item(pick) and g.inv_after(h, pick) > 6:
 			g.sell_cheapest(h)
-		g.buy_for(h, sid, false)
-		return
+		return g.buy_for(h, pick, false) == ""
+	return false
 
 # ------------------------------------------------------------ round mode shopping
 ## what is killing us: after a lost round, buy an answer to the damage type that dominates what
@@ -747,25 +788,36 @@ func _counter_item() -> String:
 		return ""
 	var phys := 0.0
 	var magic := 0.0
+	var foe_heal := 0.0
+	var foe_hp := 0.0
+	var n_foes := 0
 	for a in g.heroes:
 		if a.team == h.team:
 			phys += float(a.stats.get("taken_phys", 0.0))
 			magic += float(a.stats.get("taken_magic", 0.0))
+		else:
+			foe_heal += float(a.heal_done)
+			foe_hp += float(a.max_hp) / g.def_mult(float(a.armor_val()))
+			n_foes += 1
+	var idx := 0 if h.role() == "tank" else 1
 	var total := phys + magic
-	if total < 1500.0:
-		return ""
 	var kind := ""
-	if phys / total >= 0.6:
+	if total >= 1500.0 and phys / total >= 0.6:
 		kind = "phys"
-	elif magic / total >= 0.6:
+	elif total >= 1500.0 and magic / total >= 0.6:
 		kind = "magic"
-	else:
+	elif foe_heal >= 1200.0 and h.role() != "support":
+		kind = "heal"
+	elif n_foes > 0 and foe_hp / n_foes > 2000.0 and h.role() == "carry" and float(h.ST.get("pow", 0.0)) <= 0.0:
+		kind = "tanky"   # physical carries vs an effectively tanky lineup: armor break
+	if kind == "":
 		return ""
-	var owned: Array = ARMOR_ITEMS if kind == "phys" else MR_ITEMS
-	for id in h.inv:
-		if owned.has(id):
+	var want: String = str(COUNTERS[kind][idx])
+	var owned: Array = ARMOR_ITEMS if kind == "phys" else (MR_ITEMS if kind == "magic" else [want])
+	for id in owned:
+		if _owns(str(id)):
 			return ""
-	return str(COUNTERS[kind][0 if h.role() == "tank" else 1])
+	return want
 
 ## the loser's one full-price sale: sell the item that helps least against what hurts us and
 ## (if possible) just covers the shortfall
@@ -791,27 +843,22 @@ func _shop_rounds() -> void:
 	if g.rounds.phase != "buy":
 		return
 	var want := _counter_item()
-	var build: Array = h.def["build"].duplicate()
-	if want != "" and not h.inv.has(want):
-		build.insert(0, want)
-	for id in build:
-		var sid: String = str(id)
-		if h.inv.has(sid):
-			continue
-		var price: float = float(g.shop_price_for(h, sid))
-		if h.gold < price:
-			if sid == want and h.refund_tokens > 0:
-				var idx := _refund_pick(price - h.gold, want)
-				if idx >= 0:
-					g.sell_for(h, idx)
-					h.stat_add("refund_used")
-			if h.gold < price:
-				return
-		if g.inv_after(h, sid) > 6:
-			g.sell_cheapest(h)
-		if g.buy_for(h, sid, false) == "" and sid == want:
-			h.stat_add("counter_buy")
-		return
+	if want != "":
+		var price: float = float(g.shop_price_for(h, want))
+		if h.gold < price and h.refund_tokens > 0:
+			var idx := _refund_pick(price - h.gold, want)
+			if idx >= 0:
+				g.sell_for(h, idx)
+				h.stat_add("refund_used")
+		if h.gold >= price:
+			if g.inv_after(h, want) > 6:
+				g.sell_cheapest(h)
+			if g.buy_for(h, want, false) == "":
+				h.stat_add("counter_buy")
+	# spend down: whole items or components toward the build, a few purchases per shopping tick
+	for i in 6:
+		if not _buy_next(h.def["build"]):
+			break
 
 # ============================================================ 3C driver
 ## The decision code above sets an intent (_move / _amove / _engage / _cast). Every step, _drive() turns it into

@@ -6,7 +6,7 @@ extends "res://kit_base.gd"
 ##   * tooltips (tip() writes the description from the effects)
 ##
 ## Effect block: {"do": <op>, "on": <selector>, ...params}. Any numeric param may be a per-level array, or a
-## scaling dictionary {"v": base (number or per-level array), "str"/"agi"/"int": k × attribute, "atk": k × attack damage,
+## scaling dictionary {"v": base (number or per-level array), "atk": k × attack damage,
 ## "hp": k × caster max hp, "charge": [x at no charge, x at full charge] multiplier} — the right-click skill (key "w",
 ## never levelled) uses these so it grows with the hero. Charge skills: "charge": {time, min, move} on the skill.
 ## Selectors (on):  target | self | enemies | allies | line | all_allies      (+ "at": pos|self|target, "r": radius)
@@ -19,7 +19,7 @@ extends "res://kit_base.gd"
 ##   shot {speed, len, w, col, pierce, then:[...]}  (skillshot; "then" runs on each unit hit)
 ##   delay {t, r, col, then:[...]}                 zone {dur, tick, r, col, at, follow, each:[...]}
 ##   fx {kind: ring|burst, at, r, col}              sfx {name, pitch, vol}      shake {v}
-## Passive skill: "passive": {dr, regen, armor, as, ms, aura: {id, v, r}}
+## Passive skill: "passive": {dr, regen, def, as, ms, aura: {id, v, r}}
 
 var shots: Array = []
 var zones: Array = []
@@ -52,9 +52,6 @@ func val(p, lv: int) -> float:
 	if p is Dictionary:
 		var dct: Dictionary = p
 		var v: float = val(dct.get("v", 0.0), lv)
-		for a in ["str", "agi", "int"]:
-			if dct.has(a):
-				v += float(dct[a]) * float(h.ST.get(a, 0.0))
 		if dct.has("atk"):
 			v += float(dct["atk"]) * h.atk_dmg()
 		if dct.has("hp"):
@@ -77,7 +74,7 @@ func _col(e: Dictionary) -> Color:
 # ------------------------------------------------------------ hero hooks
 func cast_range(s: String, _tgt) -> float:
 	var r: float = val(h.sdef[s].get("range", 0.0), maxi(1, int(h.sk[s])))
-	return r + float(h.ST.get("cast", 0.0)) if r > 0.0 else 0.0
+	return r if r > 0.0 else 0.0
 
 func skill_radius(s: String) -> float:
 	var m := ai_meta(s)
@@ -90,7 +87,7 @@ func stat_mods(n: Dictionary) -> void:
 			continue
 		var p: Dictionary = st["passive"]
 		var lv: int = int(h.sk[s])
-		if p.has("armor"): n["armor"] = float(n["armor"]) + val(p["armor"], lv)
+		if p.has("def"): n["def"] = float(n["def"]) + val(p["def"], lv)
 		if p.has("regen"): n["hpr"] = float(n["hpr"]) + val(p["regen"], lv)
 		if p.has("as"): n["as"] = float(n["as"]) + val(p["as"], lv)
 		if p.has("ms"): n["ms"] = float(n["ms"]) + val(p["ms"], lv)
@@ -185,7 +182,7 @@ func _do(e: Dictionary, ctx: Dictionary) -> void:
 					g.heal(h, u, val(e.get("amt", 0.0), lv) + val(e.get("pct", 0.0), lv) * float(u.max_hp))
 		"barrier":
 			for u in _units(e, ctx):
-				u.add_barrier(val(e.get("amt", 0.0), lv) + val(e.get("amt_hp", 0.0), lv) * h.max_hp, val(e.get("dur", 4.0), lv))
+				u.add_barrier((val(e.get("amt", 0.0), lv) + val(e.get("amt_hp", 0.0), lv) * h.max_hp) * h.support_mult(), val(e.get("dur", 4.0), lv))
 		"stun":
 			for u in _units(e, ctx):
 				if u.team != h.team:
@@ -395,7 +392,7 @@ func _walk(effects: Array, acc: Dictionary, lv: int, mult: float) -> void:
 				if foe_side:
 					acc["roles"]["soft"] = true
 			"buff":
-				if str(e["id"]) in ["as", "haste", "armor", "dr"]:
+				if str(e["id"]) in ["as", "haste", "def", "res", "dr"]:
 					acc["roles"]["buff_ally" if on == "target" or on == "allies" else "buff_self"] = true
 			"dash":
 				acc["roles"]["gap_close"] = true
@@ -416,7 +413,7 @@ func _walk(effects: Array, acc: Dictionary, lv: int, mult: float) -> void:
 func ai_meta(s: String) -> Dictionary:
 	var st: Dictionary = h.sdef[s]
 	var lv: int = maxi(1, int(h.sk[s]))
-	var key := "%s%d%d_%d_%d" % [s, lv, int(h.max_hp / 200.0), int(h.atk_dmg() / 10.0), int(float(h.ST.get("int", 0.0)) / 5.0)]
+	var key := "%s%d%d_%d_%d" % [s, lv, int(h.max_hp / 200.0), int(h.atk_dmg() / 10.0), int(float(h.ST.get("pow", 0.0)) * 20.0)]
 	if _meta_cache.has(key):
 		return _meta_cache[key]
 	var m := {}
@@ -467,18 +464,18 @@ func est_heal(s: String) -> float:
 	return float(ai_meta(s).get("est_heal", 0.0))
 
 # ------------------------------------------------------------ auto-generated tooltip
-const BUFF_NAMES := {"haste": "移速", "as": "攻速", "armor": "护甲", "dr": "伤害减免", "regen": "生命回复"}
+const BUFF_NAMES := {"haste": "移速", "as": "攻速", "def": "物理防御", "res": "法术防御", "dr": "伤害减免", "regen": "生命回复"}
 
-const SCALE_NAMES := {"str": "力量", "agi": "敏捷", "int": "智力", "atk": "攻击力", "hp": "最大生命"}
+const SCALE_NAMES := {"atk": "攻击力", "hp": "最大生命"}
 
 func _vals(p) -> String:
 	if p is Dictionary:
-		# scaling value: "40 + 1.6×智力（当前 136）"; charge range appended
+		# scaling value: "30 + 0.7×攻击力（当前 96）"; charge range appended
 		var dct: Dictionary = p
 		var parts := []
 		if float(val(dct.get("v", 0.0), 1)) != 0.0 or dct.get("v", 0.0) is Array:
 			parts.append(_vals(dct.get("v", 0.0)))
-		for k in ["str", "agi", "int", "atk", "hp"]:
+		for k in ["atk", "hp"]:
 			if dct.has(k):
 				parts.append("%s×%s" % [_n(float(dct[k])), SCALE_NAMES[k]])
 		var txt := " + ".join(PackedStringArray(parts))
@@ -572,7 +569,7 @@ func tip(s: String) -> String:
 		var p: Dictionary = st["passive"]
 		var bits := []
 		if p.has("dr"): bits.append("受到的伤害 -%s" % _pct(p["dr"]))
-		if p.has("armor"): bits.append("护甲 +%s" % _vals(p["armor"]))
+		if p.has("def"): bits.append("物理防御 +%s" % _vals(p["def"]))
 		if p.has("regen"): bits.append("生命回复 +%s" % _vals(p["regen"]))
 		if p.has("as"): bits.append("攻速 +%s" % _vals(p["as"]))
 		if p.has("aura"):

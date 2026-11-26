@@ -92,8 +92,6 @@ func _unhandled_input(ev: InputEvent) -> void:
 				_learn(s)
 			else:
 				_press(s)
-		elif k == KEY_O and (ev.ctrl_pressed or ev.meta_pressed):
-			_learn("attr")
 		elif k == KEY_F6:
 			gm.set_autopilot(not gm.autopilot)
 			hd.toast("AI 托管：%s（F6 切换）" % ("开" if gm.autopilot else "关"), Color(0.6, 1.0, 1.0), 2.5)

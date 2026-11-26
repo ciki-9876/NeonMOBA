@@ -1,106 +1,113 @@
-"""NEON DRIFT v3 — item database (single source of truth).
-Writes:  items_db.gd  (GDScript constants for the game)
-         tools/neondrift_items.lua  (Aseprite script that draws one 24px icon per item)
-Prices / recipes follow DOTA 2 (7.3x) closely, adapted to this hero.
+#!/usr/bin/env python3
+"""NeonMOBA — item database (single source of truth). Design: docs/design/属性与装备迭代设计案.md
+Writes:  items_db.gd       GDScript constants for the game (do not edit by hand)
+         art/items.png      24x24 icon per item, ICON_COLS (10) per row, in ORDER
+Usage:   python3 tools/gen_items.py [project_root]
+
+Stats are secondary stats only (no strength / agility / intelligence):
+  hp hpr mana mpr atk as(%) def res ms range pspd vision ls(%) pow(%) cdr(%)
+Prices follow the per-stat price table (PRICE below). Basic items are priced exactly by it;
+finished items = components + an upgrade fee that pays for their special effect.
 """
-import json, os, sys
+import json, math, os, sys
+from PIL import Image
 
 ROOT = sys.argv[1] if len(sys.argv) > 1 else '.'
 
-# id, name, cat, cost(total), comps, recipe, stats, special, glyph, c1, c2, note
+# gold per point of each stat (design doc, section 4.2)
+PRICE = {'hp': 4, 'atk': 50, 'as': 25, 'def': 22, 'res': 22, 'pow': 40, 'cdr': 90, 'ms': 10, 'hpr': 100,
+         'mana': 3, 'mpr': 150, 'ls': 70, 'range': 6, 'pspd': 1, 'vision': 2}
+
+# shop tabs
+KINDS = {'dmg': '输出', 'spd': '攻速', 'pow': '技能', 'def': '生存', 'mob': '机动', 'eye': '视野', 'hero': '英雄强化'}
+
 I = []
-def item(id, name, cat, cost, glyph, c1, c2, stats=None, comps=None, recipe=0, special=None, note=''):
-    I.append(dict(id=id, name=name, cat=cat, cost=cost, comps=comps or [], recipe=recipe,
-                  stats=stats or {}, special=special or {}, glyph=glyph, c1=c1, c2=c2, note=note))
+def item(id, name, tier, kind, glyph, c1, c2, stats=None, comps=None, upgrade=0, special=None, note='', cost=None):
+    stats = stats or {}
+    comps = comps or []
+    if cost is None:
+        if comps:
+            cost = sum(ids[c]['cost'] for c in comps) + upgrade
+        else:
+            cost = int(round(sum(PRICE[k] * v for k, v in stats.items())))
+    it = dict(id=id, name=name, cat=tier, kind=kind, cost=cost, comps=comps, recipe=upgrade, stats=stats,
+              special=special or {}, glyph=glyph, c1=c1, c2=c2, note=note)
+    I.append(it)
+    ids[id] = it
 
-# ---------------- consumables (applied on purchase) ----------------
-item('clarity', '净化药水', 'consumable', 50, 'potion', '4aa8ff', 'c8e8ff', special={'c_mp': [6.0, 25.0]}, note='25 秒内恢复 150 魔法')
-item('mango', '魔法芒果', 'consumable', 65, 'fruit', 'ffb030', '5dbb4a', special={'c_mana_now': 100}, note='立即恢复 100 魔法')
-item('tome', '知识之书', 'consumable', 75, 'book', '3a7a3a', 'e8d890', special={'c_xp': 0.6}, note='立即获得当前等级 60% 的经验')
-item('tango', '树之祭祀', 'consumable', 90, 'leaf', '5dbb4a', '2a6a2a', special={'c_hp': [7.0, 16.0]}, note='16 秒内恢复 112 生命')
-item('salve', '治疗药膏', 'consumable', 100, 'potion', 'ff4a5a', 'ffd0d0', special={'c_hp': [40.0, 10.0]}, note='10 秒内恢复 400 生命')
-item('shard', '阿哈利姆魔晶', 'consumable', 1400, 'crystal', '4aa8ff', 'b0f0ff', special={'shard': True}, note='永久升级 Q：脉冲射线变为三道扇形光束（限购 1 次）')
-item('moon', '银月之晶', 'consumable', 4000, 'moon', 'c0d8ff', '6a80c0', special={'moon': 60}, note='永久提升 60 攻击速度（限购 1 次）')
+ids = {}
+# ---------------- basic (priced by PRICE) ----------------
+item('blade', '脉冲刃片', 'basic', 'dmg', 'blade', 'ff5a6a', 'ffd0d8', {'atk': 10})
+item('chip', '超频芯片', 'basic', 'spd', 'chip', 'ffb030', 'fff0c0', {'as': 15})
+item('core', '逻辑核心', 'basic', 'pow', 'core', 'b060ff', 'f0d0ff', {'pow': 10})
+item('cap', '电容模块', 'basic', 'pow', 'cell', '4a8aff', 'c0e0ff', {'mana': 150, 'mpr': 1})
+item('plate', '纳米装甲片', 'basic', 'def', 'plate', 'a0b0c8', 'e8f0ff', {'def': 15})
+item('coat', '相位涂层', 'basic', 'def', 'shield', '6ad8ff', 'e0fbff', {'res': 15})
+item('battery', '能量电池', 'basic', 'def', 'cell', 'ff4a5a', 'ffd0d0', {'hp': 200})
+item('gel', '修复凝胶', 'basic', 'def', 'drop', '5dff7a', 'd0ffd8', {'hpr': 3})
+item('leech', '吸能触点', 'basic', 'dmg', 'fang', 'c02a4a', 'ff8aa0', {'ls': 7})
+item('boots', '推进靴', 'basic', 'mob', 'boot', '4ac0a0', 'c0fff0', {'ms': 40})
+item('scope', '校准瞄具', 'basic', 'eye', 'scope', 'e0e060', 'fffff0', {'range': 50, 'pspd': 100}, note='近战只获得一半攻击距离')
+item('lens', '广角镜片', 'basic', 'eye', 'lens', '60e0ff', 'f0ffff', {'vision': 150})
 
-# ---------------- basic ----------------
-item('branch', '铁树枝干', 'basic', 50, 'branch', '8a6a3a', '5dbb4a', {'all': 1})
-item('circlet', '圆环', 'basic', 155, 'ring', 'e0c060', 'ff4a5a', {'all': 2})
-item('gauntlets', '力量手套', 'basic', 140, 'glove', 'd04a3a', '7a2a20', {'str': 3})
-item('slippers', '敏捷便鞋', 'basic', 140, 'boots', '4ac060', '1a6a30', {'agi': 3})
-item('mantle', '智力斗篷', 'basic', 140, 'cloak', '4a7aff', '1a2a7a', {'int': 3})
-item('protect', '守护指环', 'basic', 175, 'ring', 'b0b8c0', '4aa8ff', {'armor': 2})
-item('regen_ring', '回复戒指', 'basic', 175, 'ring', 'e0c060', '5dff7a', {'hpr': 1.25})
-item('sage', '贤者面罩', 'basic', 175, 'mask', '5a8ad0', 'c8e0ff', {'mpr': 0.7})
-item('blades', '攻击之爪', 'basic', 450, 'claw', 'c8c8d0', '6a6a70', {'dmg': 9})
-item('gloves', '加速手套', 'basic', 450, 'glove', 'e0a030', '7a5010', {'as': 20})
-item('band', '精灵布带', 'basic', 450, 'bracelet', '4ac060', 'e0e0a0', {'agi': 6})
-item('belt', '力量腰带', 'basic', 450, 'belt', 'b04a2a', 'e0c060', {'str': 6})
-item('robe', '法师长袍', 'basic', 450, 'robe', '4a6aff', 'e0c060', {'int': 6})
-item('boots', '速度之靴', 'basic', 500, 'boots', 'a06a3a', '5a3a1a', {'ms': 45})
-item('cloak', '抗魔斗篷', 'basic', 500, 'cloak', 'c03a3a', '5a1a1a', {'mr': 15})
-item('chainmail', '锁子甲', 'basic', 550, 'chain', 'a0a8b0', '50585f', {'armor': 4})
-item('roh', '治疗指环', 'basic', 700, 'ring', '5dff7a', 'e0c060', {'hpr': 6.5})
-item('void', '虚无宝石', 'basic', 700, 'gem', '6a4aff', 'c0b0ff', {'mpr': 1.75})
-item('energy', '能量之球', 'basic', 800, 'orb', '4a7aff', 'c0e0ff', {'mana': 250})
-item('quarterstaff', '短棍', 'basic', 875, 'staff', 'a07a4a', 'e0c060', {'dmg': 10, 'as': 10})
-item('morbid', '吸血面具', 'basic', 900, 'mask', '8a1a2a', 'ff4a5a', {'ls': 10})
-item('vitality', '精气之球', 'basic', 1000, 'orb', 'ff4a5a', 'ffc0c0', {'hp': 250})
-item('broadsword', '大剑', 'basic', 1000, 'sword', 'c8d0d8', '7a5a3a', {'dmg': 15})
-item('alacrity', '欢欣之刃', 'basic', 1000, 'sword', '4ac060', 'c0ffc0', {'agi': 10})
-item('ogre', '食人魔之斧', 'basic', 1000, 'axe', 'b04a2a', 'c8c8c8', {'str': 10})
-item('wizard', '魔力法杖', 'basic', 1000, 'staff', '4a6aff', 'c0e0ff', {'int': 10})
-item('javelin', '标枪', 'basic', 1100, 'spear', 'c8c8d0', '8a6a3a', {'dmg': 10})
-item('point', '活力之球', 'basic', 1200, 'orb', 'b060ff', 'f0c0ff', {'hp': 175, 'mana': 175})
-item('talisman', '闪避护符', 'basic', 1300, 'gem', '5dffa0', 'e0ffe0', {'eva': 15})
-item('platemail', '板甲', 'basic', 1400, 'plate', 'a0a8b0', 'e0e8f0', {'armor': 10})
-item('mithril', '秘银锤', 'basic', 1600, 'hammer', 'c8d8e8', '6a7a8a', {'dmg': 24})
-item('ultimate', '极限法球', 'basic', 2050, 'orb', 'ffd23f', 'ffffff', {'all': 10})
-item('hyperstone', '振奋宝石', 'basic', 2000, 'gem', 'ff8a2b', 'fff0c0', {'as': 60})
-item('demon', '恶魔刀锋', 'basic', 2200, 'greatsword', 'c03a3a', '3a0a0a', {'dmg': 40})
-item('eaglesong', '鹰歌弓', 'basic', 2800, 'bow', '4ac060', 'e0e0a0', {'agi': 25})
-item('mystic', '神秘法杖', 'basic', 2800, 'staff', '6a4aff', 'ffd23f', {'int': 25})
-item('reaver', '掠夺者之斧', 'basic', 2800, 'axe', 'c03a3a', 'ffd23f', {'str': 25})
-item('relic', '圣者遗物', 'basic', 3800, 'sun', 'ffd23f', 'fff8c0', {'dmg': 55})
+# ---------------- finished items: two components + upgrade fee, one special each ----------------
+item('pierce', '穿甲弹匣', 'advanced', 'dmg', 'mag', 'ff5a6a', 'ffd23f', {'atk': 22}, ['blade', 'blade'], 600,
+     {'pierce': 1}, '远程普攻穿透 1 个目标；近战扇形角度 +20°')
+item('drill', '破甲钻头', 'advanced', 'dmg', 'drill', 'ff8a3a', 'c0c8d0', {'atk': 12, 'def': 15}, ['blade', 'plate'], 670,
+     {'armor_break': [20.0, 4.0]}, '破甲：普攻命中使目标物理防御 -20，持续 4 秒')
+item('rage', '暴走处理器', 'advanced', 'spd', 'chip', 'ff5a3a', 'ffd23f', {'as': 20, 'atk': 10}, ['chip', 'blade'], 825,
+     {'crit': [0.25, 1.6]}, '普攻有 25% 几率造成 160% 伤害')
+item('coil', '超载线圈', 'advanced', 'spd', 'coil', '6ad8ff', 'ffd23f', {'as': 35}, ['chip', 'chip'], 1050,
+     {'arc': [4, 3, 60.0]}, '每第 4 次普攻命中释放连锁电弧，弹跳 3 次，每次 60 法术伤害')
+item('qcirc', '量子回路', 'advanced', 'pow', 'core', '4a8aff', 'b060ff', {'pow': 12, 'mana': 150, 'cdr': 10}, ['core', 'cap'], 700,
+     {}, '')
+item('wound', '重创注射器', 'advanced', 'pow', 'syringe', 'b060ff', '5dff7a', {'pow': 20}, ['core', 'core'], 800,
+     {'grievous': [0.4, 3.0]}, '重伤：技能命中使目标受到的治疗和护盾 -40%，持续 3 秒')
+item('reso', '共振透镜', 'advanced', 'pow', 'lens', 'b060ff', '60e0ff', {'pow': 12, 'vision': 150}, ['core', 'lens'], 800,
+     {'charge_fast': 0.2}, '蓄力技能的蓄力时间 -20%')
+item('reactive', '反应装甲', 'advanced', 'def', 'plate', 'a0b0c8', 'ffd23f', {'def': 25, 'hp': 200}, ['plate', 'battery'], 670,
+     {'tenacity': 0.2}, '韧性：受到的控制时间 -20%')
+item('barrier', '屏障发生器', 'advanced', 'def', 'shield', '6ad8ff', 'ffd23f', {'res': 25, 'hp': 200}, ['coat', 'battery'], 670,
+     {'spell_shield': 200.0}, '每回合第一次受到技能伤害时获得 200 点护盾')
+item('pod', '再生舱', 'advanced', 'def', 'drop', '5dff7a', 'ff4a5a', {'hp': 250, 'hpr': 5}, ['gel', 'battery'], 600,
+     {'regen_ooc': 2.0}, '脱离战斗 3 秒后生命回复翻倍')
+item('gauntlet', '吸能护手', 'advanced', 'dmg', 'fang', 'c02a4a', 'ffd23f', {'atk': 12, 'ls': 10}, ['leech', 'blade'], 510,
+     {}, '')
+item('thruster', '冲锋推进器', 'advanced', 'mob', 'boot', 'ffb030', '4ac0a0', {'ms': 50, 'as': 10}, ['boots', 'chip'], 725,
+     {'charge_move': 0.5}, '蓄力时的移速惩罚减半')
+item('tboots', '战术护靴', 'advanced', 'mob', 'boot', 'a0b0c8', '4ac0a0', {'ms': 45, 'def': 15}, ['boots', 'plate'], 670,
+     {'hurt_haste': [0.15, 2.0]}, '受到伤害后 2 秒内移速 +15%')
+item('hawk', '鹰眼镜组', 'advanced', 'eye', 'scope', 'e0e060', '60e0ff', {'range': 70, 'vision': 200, 'pspd': 200},
+     ['scope', 'lens'], 900, {'far_bonus': 0.15}, '远程普攻飞行超过攻击距离后伤害 +15%（近战只获得一半攻击距离）')
+item('beacon', '支援信标', 'advanced', 'pow', 'beacon', '5dff7a', 'ffd23f', {'mpr': 2, 'hpr': 3}, ['cap', 'gel'], 600,
+     {'heal_amp': 0.15}, '你施加的治疗和护盾 +15%')
 
-# ---------------- advanced (recipes) ----------------
-item('wraith', '怨灵系带', 'advanced', 505, 'bracelet', '6aff8a', 'e0c060', {'agi': 6, 'str': 2, 'int': 2, 'armor': 1.5}, ['slippers', 'circlet'], 210)
-item('treads', '动力鞋', 'advanced', 1400, 'boots', 'ffd23f', '8a5a1a', {'ms': 45, 'as': 25, 'agi': 10}, ['boots', 'gloves', 'band'])
-item('phase', '相位鞋', 'advanced', 1500, 'boots', 'ff6a3a', '5a1a1a', {'ms': 45, 'dmg': 12, 'armor': 4}, ['boots', 'blades', 'chainmail'])
-item('perseverance', '坚韧球', 'advanced', 1400, 'orb', '5dff7a', '6a4aff', {'hpr': 6.5, 'mpr': 1.75}, ['roh', 'void'])
-item('lance', '魔龙枪', 'advanced', 1900, 'spear', '4ac060', 'ff6a3a', {'agi': 12, 'str': 12, 'range': 150}, ['band', 'band', 'ogre'])
-item('crystalys', '水晶剑', 'advanced', 1950, 'sword', '6ad8ff', 'ffffff', {'dmg': 24}, ['broadsword', 'blades'], 500, {'crit': [0.3, 1.6]})
-item('kaya', '慧光', 'advanced', 2050, 'staff', 'b060ff', 'ffd0ff', {'int': 16, 'amp': 10}, ['wizard', 'robe'], 600)
-item('yasha', '夜叉', 'advanced', 2050, 'sword', '4ac060', 'e0ffe0', {'agi': 16, 'as': 10, 'ms_pct': 8}, ['alacrity', 'band'], 600)
-item('sange', '散华', 'advanced', 2050, 'sword', 'ff4a3a', 'ffe0d0', {'str': 16, 'hpr': 3}, ['ogre', 'belt'], 600)
-item('aether', '以太透镜', 'advanced', 2275, 'lens', '6ad8ff', 'ffffff', {'mana': 300, 'mpr': 1.5, 'cast': 225}, ['energy', 'void'], 775)
-item('maelstrom', '漩涡', 'advanced', 2700, 'bolt', '6ad8ff', 'ffd23f', {'dmg': 24}, ['mithril', 'javelin'], 0, {'chain': [0.3, 4, 120]})
-item('soul', '灵魂之助', 'advanced', 3000, 'orb', 'ff6ad8', 'ffffff', {'hp': 425, 'mana': 425}, ['vitality', 'energy', 'point'])
-item('deso', '黯灭', 'advanced', 3500, 'skull', 'c03a3a', '2a0a0a', {'dmg': 50}, ['mithril', 'mithril'], 300, {'deso': 6})
-item('sny', '散夜对剑', 'advanced', 4100, 'sword', 'ffb030', '4ac060', {'str': 16, 'agi': 16, 'as': 12, 'ms_pct': 12}, ['sange', 'yasha'])
-item('ynk', '慧夜对剑', 'advanced', 4100, 'sword', '4ac060', 'b060ff', {'agi': 16, 'int': 16, 'ms_pct': 12, 'amp': 12}, ['yasha', 'kaya'])
-item('kns', '散慧对剑', 'advanced', 4100, 'sword', 'ff4a3a', 'b060ff', {'str': 16, 'int': 16, 'amp': 12, 'hpr': 4}, ['kaya', 'sange'])
-item('aghs', '阿哈利姆神杖', 'advanced', 4200, 'staff', '4aa8ff', 'ffd23f', {'all': 10, 'hp': 175, 'mana': 175}, ['point', 'ogre', 'alacrity', 'wizard'], 0, {'scepter': True})
-item('heart', '恐鳌之心', 'advanced', 5000, 'heart', 'ff3a4a', 'ffc0c0', {'str': 40, 'hp': 250}, ['vitality', 'reaver'], 1200, {'heart': 1.2})
-item('radiance', '辉耀', 'advanced', 5050, 'sun', 'ff8a2b', 'ffd23f', {'dmg': 55}, ['relic'], 1250, {'radiance': [60, 700]})
-item('satanic', '撒旦之邪力', 'advanced', 5050, 'mask', 'c03a3a', 'ffd23f', {'str': 25, 'dmg': 25, 'ls': 25}, ['morbid', 'reaver', 'broadsword'], 350)
-item('ac', '强袭胸甲', 'advanced', 5125, 'plate', 'ffd23f', '8a6a1a', {'armor': 14, 'as': 30}, ['platemail', 'hyperstone', 'chainmail'], 1175, {'ac_aura': 5})
-item('daedalus', '代达罗斯之殇', 'advanced', 5150, 'greatsword', 'ffd23f', 'c03a3a', {'dmg': 88}, ['crystalys', 'demon'], 1000, {'crit': [0.3, 2.25]})
-item('shiva', '希瓦的守护', 'advanced', 5175, 'flake', '6ad8ff', 'ffffff', {'armor': 15, 'int': 30}, ['platemail', 'mystic'], 975, {'shiva': 0.4})
-item('mkb', '金箍棒', 'advanced', 5200, 'hammer', 'ffd23f', 'c03a3a', {'dmg': 40, 'as': 45}, ['demon', 'javelin', 'quarterstaff'], 1025, {'mkb': [0.8, 70]})
-item('octarine', '玲珑心', 'advanced', 5275, 'orb', '6ad8ff', 'ffd23f', {'hp': 425, 'mana': 725, 'mpr': 1.5, 'cast': 225, 'cdr': 25}, ['soul', 'aether'])
-item('skadi', '斯嘉蒂之眼', 'advanced', 5300, 'flake', '4aa8ff', 'c0e0ff', {'all': 22, 'hp': 220, 'mana': 220}, ['ultimate', 'ultimate', 'point'], 0, {'skadi': [0.4, 1.5]})
-item('butterfly', '蝴蝶', 'advanced', 5450, 'wings', '4ac060', 'ffd23f', {'agi': 35, 'dmg': 25, 'as': 30, 'eva': 35}, ['eaglesong', 'talisman', 'quarterstaff'], 475)
-item('mjollnir', '雷神之锤', 'advanced', 5500, 'bolt', 'ffd23f', '6ad8ff', {'dmg': 24, 'as': 70}, ['maelstrom', 'hyperstone'], 800, {'chain': [0.3, 12, 180]})
-item('rapier', '圣剑', 'advanced', 7000, 'greatsword', 'ffffff', 'ffd23f', {'dmg': 330}, ['relic', 'demon'], 1000)
+# ---------------- ultimate items: finished item + basic + upgrade fee ----------------
+item('annihil', '歼灭者', 'ultimate', 'dmg', 'blade', 'ffd23f', 'ff3a3a', {'atk': 45, 'as': 20}, ['rage', 'blade'], 2000,
+     {'crit': [0.3, 2.2]}, '普攻有 30% 几率造成 220% 伤害')
+item('storm', '风暴核心', 'ultimate', 'spd', 'coil', 'ffd23f', '6ad8ff', {'as': 60}, ['coil', 'chip'], 1825,
+     {'arc': [3, 5, 60.0]}, '每第 3 次普攻命中释放连锁电弧，弹跳 5 次，每次 60 法术伤害')
+item('singular', '奇点透镜', 'ultimate', 'pow', 'orb', 'b060ff', 'ffffff', {'pow': 35, 'mana': 250, 'cdr': 20}, ['qcirc', 'core'], 2300,
+     {'spell_vamp': 0.15}, '技能伤害的 15% 转为生命')
+item('permafrost', '永冻之心', 'ultimate', 'def', 'flake', '6ad8ff', 'ffffff', {'def': 45, 'res': 25, 'hp': 250},
+     ['reactive', 'coat'], 2300, {'as_aura': [0.2, 600.0]}, '光环：600 范围内对手攻击间隔 +20%')
+item('undying', '不灭心核', 'ultimate', 'def', 'heart', 'ff3a4a', 'ffc0c0', {'hp': 700, 'hpr': 8}, ['pod', 'battery'], 2100,
+     {'heart': 1.0}, '每秒额外回复 1% 最大生命')
+item('bloodrage', '嗜血狂刃', 'ultimate', 'dmg', 'fang', 'ff2a4a', 'ffd23f', {'atk': 35, 'ls': 18}, ['gauntlet', 'blade'], 1800,
+     {'low_ls': 0.35}, '生命低于 35% 时吸血翻倍')
 
-# ---- sanity: totals must equal component sums + recipe
-ids = {it['id']: it for it in I}
+# ---------------- hero upgrades (once per map) ----------------
+item('chipx', '特化芯片', 'upgrade', 'hero', 'chipx', 'ffd23f', '6ad8ff', {}, [], 0, {'shard': True},
+     '永久强化该英雄的右键（不占物品栏，限购 1 次）', cost=1400)
+item('protocol', '终极协议', 'upgrade', 'hero', 'orb', '4aa8ff', 'ffd23f', {'hp': 250, 'pow': 10}, [], 0, {'scepter': True},
+     '强化该英雄的 R（占一个物品栏）', cost=3800)
+
+# ---- sanity
 for it in I:
     if it['comps']:
-        s = sum(ids[c]['cost'] for c in it['comps']) + it['recipe']
-        assert s == it['cost'], (it['id'], s, it['cost'])
-prices = [it['cost'] for it in I]
-assert min(prices) == 50 and max(prices) == 7000
+        assert it['cost'] == sum(ids[c]['cost'] for c in it['comps']) + it['recipe'], it['id']
+    for k in it['stats']:
+        assert k in PRICE, (it['id'], k)
 
 # ---------------- GDScript DB ----------------
 def gd(v):
@@ -108,144 +115,127 @@ def gd(v):
     if isinstance(v, (int, float)): return repr(v)
     if isinstance(v, str): return json.dumps(v, ensure_ascii=False)
     if isinstance(v, list): return '[' + ', '.join(gd(x) for x in v) + ']'
-    if isinstance(v, dict): return '{' + ', '.join(f'{json.dumps(k)}: {gd(x)}' for k, x in v.items()) + '}'
+    if isinstance(v, dict): return '{' + ', '.join(f'{json.dumps(k, ensure_ascii=False)}: {gd(x)}' for k, x in v.items()) + '}'
     raise TypeError(v)
 
-lines = ['extends RefCounted', '## Generated by tools/gen_items.py — do not edit by hand.', '', 'const ORDER := ' + gd([it['id'] for it in I]), '', 'const DB := {']
+lines = ['extends RefCounted', '## Generated by tools/gen_items.py — do not edit by hand.',
+         '## cat: basic | advanced | ultimate | upgrade (hero upgrades). kind: shop tab, see KINDS.', '',
+         'const KINDS := ' + gd(KINDS), '', 'const ORDER := ' + gd([it['id'] for it in I]), '', 'const DB := {']
 for it in I:
-    d = {k: it[k] for k in ('name', 'cat', 'cost', 'comps', 'recipe', 'stats', 'special', 'note')}
+    d = {k: it[k] for k in ('name', 'cat', 'kind', 'cost', 'comps', 'recipe', 'stats', 'special', 'note')}
     lines.append(f'\t"{it["id"]}": {gd(d)},')
 lines.append('}')
 open(os.path.join(ROOT, 'items_db.gd'), 'w').write('\n'.join(lines) + '\n')
 
-# ---------------- Aseprite icon script ----------------
-LUA_HEAD = r'''-- NEON DRIFT v3 — item icons (generated by tools/gen_items.py)
--- Draws one 24x24 icon per item, 10 per row, and opens the sheet as a sprite.
-local S = 24
-local COLS = 10
-local function rgba(r, g, b, a) return app.pixelColor.rgba(r, g, b, a or 255) end
-local function hx(h, f)
-  f = f or 1
-  local function c(v) v = math.floor(v * f + 0.5); if v < 0 then return 0 elseif v > 255 then return 255 end; return v end
-  return rgba(c(tonumber(h:sub(1, 2), 16)), c(tonumber(h:sub(3, 4), 16)), c(tonumber(h:sub(5, 6), 16)))
-end
-local OUT = rgba(12, 10, 20)
-local img
-local function px(x, y, col)
-  x, y = math.floor(x), math.floor(y)
-  if x >= 1 and y >= 1 and x < S - 1 and y < S - 1 then img:drawPixel(x, y, col) end
-end
-local function line(x0, y0, x1, y1, col, w)
-  w = w or 1
-  local n = math.max(math.abs(x1 - x0), math.abs(y1 - y0), 1)
-  for i = 0, n do
-    local x, y = x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n
-    for a = 0, w - 1 do for b = 0, w - 1 do px(x + a, y + b, col) end end
-  end
-end
-local function rect(x, y, w, h, col) for j = 0, h - 1 do for i = 0, w - 1 do px(x + i, y + j, col) end end end
-local function ell(cx, cy, rx, ry, col)
-  for y = math.floor(cy - ry), math.ceil(cy + ry) do for x = math.floor(cx - rx), math.ceil(cx + rx) do
-    local dx, dy = (x + 0.5 - cx) / rx, (y + 0.5 - cy) / ry
-    if dx * dx + dy * dy <= 1 then px(x, y, col) end
-  end end
-end
-local function ring(cx, cy, r, col, t)
-  t = t or 1.2
-  for y = math.floor(cy - r - 1), math.ceil(cy + r + 1) do for x = math.floor(cx - r - 1), math.ceil(cx + r + 1) do
-    local d = math.sqrt((x + 0.5 - cx) ^ 2 + (y + 0.5 - cy) ^ 2)
-    if math.abs(d - r) <= t / 2 then px(x, y, col) end
-  end end
-end
-local function outline(col)
-  local solid = {}
-  for y = 0, S - 1 do for x = 0, S - 1 do solid[y * S + x] = app.pixelColor.rgbaA(img:getPixel(x, y)) == 255 and img:getPixel(x, y) ~= BG_MARK end end
-end
+# ---------------- icons (24x24, neon on dark) ----------------
+S, COLS = 24, 10
+def hexc(h, f=1.0, a=255):
+    c = [min(255, max(0, int(int(h[i:i + 2], 16) * f))) for i in (0, 2, 4)]
+    return (c[0], c[1], c[2], a)
+TIER_FRAME = {'basic': '4a5070', 'advanced': '6ad8ff', 'ultimate': 'ffd23f', 'upgrade': 'ff6ad8'}
 
--- glyphs: (c1 main, c2 accent, d dark, l light)
-local G = {}
-G.potion = function(c1, c2, d, l) rect(10, 4, 4, 3, hx('c8b8a0')); ell(12, 14, 6.5, 6.5, d); ell(12, 14, 5.5, 5.5, c1); ell(10, 12, 1.6, 1.6, c2); rect(9, 7, 6, 2, hx('e0e0e8')) end
-G.fruit = function(c1, c2, d, l) ell(12, 14, 7, 6.5, d); ell(12, 14, 6, 5.5, c1); ell(9.5, 11.5, 1.6, 1.6, l); line(12, 8, 14, 4, hx('6a4a2a'), 1); ell(16, 6, 2.5, 1.5, c2) end
-G.leaf = function(c1, c2, d, l) for k = 0, 2 do local x = 6 + k * 5; ell(x + 1, 13, 2.5, 6, d); ell(x + 1, 13, 1.7, 5.2, c1); line(x + 1, 8, x + 1, 19, c2) end end
-G.book = function(c1, c2, d, l) rect(5, 5, 14, 15, d); rect(6, 6, 12, 13, c1); rect(7, 7, 2, 11, d); rect(11, 9, 5, 2, c2); rect(11, 13, 5, 1, c2) end
-G.crystal = function(c1, c2, d, l) for y = 3, 20 do local w = (y < 10) and (y - 3) * 0.8 or (20 - y) * 0.6; line(12 - w, y, 12 + w, y, (y % 3 == 0) and c2 or c1) end; line(12, 3, 12, 20, l) end
-G.moon = function(c1, c2, d, l) ell(12, 12, 8, 8, c1); ell(15, 10, 7, 7, hx('112014')); ell(9, 14, 1.3, 1.3, c2); ell(8, 9, 1, 1, c2) end
-G.branch = function(c1, c2, d, l) line(5, 19, 18, 5, c1, 2); line(11, 12, 7, 7, c1, 1); line(14, 9, 18, 12, c1, 1); ell(7, 7, 2, 1.5, c2); ell(18, 12, 2, 1.5, c2); ell(18, 5, 2, 2, c2) end
-G.ring = function(c1, c2, d, l) ring(12, 13, 6, c1, 2.4); ring(12, 13, 6, l, 0.8); ell(12, 6, 3, 2.5, c2); ell(11, 5.5, 1, 1, hx('ffffff')) end
-G.glove = function(c1, c2, d, l) rect(7, 10, 10, 9, d); rect(8, 11, 8, 7, c1); for k = 0, 3 do rect(8 + k * 2, 5 + (k == 0 and 3 or 0), 2, 6, c1) end; rect(6, 18, 12, 3, c2) end
-G.boots = function(c1, c2, d, l) rect(7, 4, 6, 12, d); rect(8, 5, 4, 11, c1); rect(7, 14, 12, 5, d); rect(8, 15, 10, 3, c1); rect(7, 6, 6, 2, c2); rect(14, 15, 3, 1, l) end
-G.mask = function(c1, c2, d, l) ell(12, 12, 8, 9, d); ell(12, 12, 7, 8, c1); ell(9, 10, 2, 1.4, hx('000000')); ell(15, 10, 2, 1.4, hx('000000')); line(9, 16, 15, 16, c2); line(12, 4, 12, 7, c2) end
-G.cloak = function(c1, c2, d, l) for y = 5, 20 do local w = 3 + (y - 5) * 0.45; line(12 - w, y, 12 + w, y, (y < 7) and c2 or c1) end; line(12, 7, 12, 20, d) end
-G.robe = function(c1, c2, d, l) for y = 4, 20 do local w = (y < 9) and 4 or 4 + (y - 9) * 0.4; line(12 - w, y, 12 + w, y, c1) end; line(12, 5, 12, 20, c2); rect(8, 11, 8, 1, c2) end
-G.belt = function(c1, c2, d, l) rect(3, 9, 18, 7, d); rect(3, 10, 18, 5, c1); rect(9, 8, 6, 9, c2); rect(11, 10, 2, 5, d) end
-G.bracelet = function(c1, c2, d, l) ring(12, 12, 7, c1, 3); ring(12, 12, 7, l, 0.8); for k = 0, 3 do local a = k * 1.57; ell(12 + math.cos(a) * 7, 12 + math.sin(a) * 7, 1.5, 1.5, c2) end end
-G.claw = function(c1, c2, d, l) for k = 0, 2 do line(6 + k * 4, 20, 9 + k * 4, 4, c1, 2); px(9 + k * 4, 4, l) end; rect(5, 18, 14, 3, c2) end
-G.chain = function(c1, c2, d, l) rect(5, 5, 14, 15, d); for y = 6, 18, 2 do for x = 6, 17, 2 do px(x + (y % 4 == 0 and 1 or 0), y, c1) end end; rect(9, 4, 6, 2, c2) end
-G.plate = function(c1, c2, d, l) for y = 4, 20 do local w = (y < 8) and 8 or 7 - (y - 8) * 0.25; line(12 - w, y, 12 + w, y, (y % 5 == 0) and d or c1) end; line(12, 4, 12, 20, c2); rect(5, 4, 4, 3, c2); rect(15, 4, 4, 3, c2) end
-G.sword = function(c1, c2, d, l) line(6, 18, 17, 7, c1, 2); line(7, 18, 18, 7, l); line(17, 6, 19, 4, l); line(5, 15, 9, 19, c2, 2); line(4, 20, 6, 18, hx('6a4a2a'), 2) end
-G.greatsword = function(c1, c2, d, l) line(5, 19, 18, 6, c1, 3); line(6, 19, 19, 6, l); line(4, 15, 9, 20, c2, 2); line(3, 21, 5, 19, d, 2); px(19, 4, l); px(20, 4, l) end
-G.hammer = function(c1, c2, d, l) line(6, 19, 15, 10, hx('8a6a3a'), 2); rect(12, 3, 9, 8, d); rect(13, 4, 7, 6, c1); rect(13, 4, 7, 1, l); rect(15, 6, 3, 2, c2) end
-G.orb = function(c1, c2, d, l) ell(12, 12, 8, 8, d); ell(12, 12, 7, 7, c1); ell(12, 12, 4, 4, c2); ell(9.5, 9.5, 1.8, 1.8, hx('ffffff')) end
-G.staff = function(c1, c2, d, l) line(7, 21, 15, 7, hx('8a6a3a'), 2); ell(16, 6, 4, 4, d); ell(16, 6, 3, 3, c1); ell(15, 5, 1, 1, c2); ring(16, 6, 4.5, c2, 0.8) end
-G.axe = function(c1, c2, d, l) line(7, 21, 15, 5, hx('8a6a3a'), 2); ell(16, 8, 5, 5.5, d); ell(16, 8, 4, 4.5, c2); ell(17, 8, 2.5, 3.5, c1) end
-G.bow = function(c1, c2, d, l) for k = 0, 30 do local a = -1.2 + k * 0.08; px(8 + math.cos(a) * 10, 12 + math.sin(a) * 10, c1); px(8 + math.cos(a) * 9, 12 + math.sin(a) * 9, c1) end; line(11, 3, 11, 21, l); line(4, 12, 20, 12, c2); px(20, 11, c2); px(20, 13, c2) end
-G.spear = function(c1, c2, d, l) line(4, 20, 17, 7, hx('8a6a3a'), 2); for y = 3, 9 do local w = (y - 3) * 0.6; line(18 - w, y + w * 0, 18 + w, y, c1) end; line(16, 9, 20, 9, c2) end
-G.gem = function(c1, c2, d, l) for y = 5, 19 do local w = (y < 10) and (y - 5) * 1.2 + 2 or (19 - y) * 0.75; line(12 - w, y, 12 + w, y, (y < 10) and c2 or c1) end; line(8, 10, 16, 10, l) end
-G.heart = function(c1, c2, d, l) ell(9, 10, 4.5, 4.5, c1); ell(15, 10, 4.5, 4.5, c1); for y = 11, 20 do local w = (20 - y) * 0.85; line(12 - w, y, 12 + w, y, c1) end; ell(8, 9, 1.5, 1.5, c2) end
-G.bolt = function(c1, c2, d, l) local p = { { 15, 2 }, { 8, 12 }, { 12, 12 }, { 9, 22 }, { 17, 10 }, { 13, 10 }, { 16, 2 } }; for i = 1, #p - 1 do line(p[i][1], p[i][2], p[i + 1][1], p[i + 1][2], c1, 2) end; ring(12, 12, 9, c2, 0.8) end
-G.sun = function(c1, c2, d, l) for k = 0, 7 do local a = k * 0.785; line(12 + math.cos(a) * 6, 12 + math.sin(a) * 6, 12 + math.cos(a) * 10, 12 + math.sin(a) * 10, c1, 1) end; ell(12, 12, 5.5, 5.5, c1); ell(12, 12, 3.5, 3.5, c2) end
-G.skull = function(c1, c2, d, l) ell(12, 10, 7, 6.5, hx('e0d8c8')); rect(8, 15, 8, 4, hx('e0d8c8')); ell(9.5, 10, 1.8, 2, c1); ell(14.5, 10, 1.8, 2, c1); for x = 9, 15, 2 do px(x, 18, hx('3a3030')) end; line(3, 21, 7, 17, c2, 2) end
-G.lens = function(c1, c2, d, l) ring(10, 10, 6.5, c2, 1.6); ell(10, 10, 5.5, 5.5, c1); ell(8, 8, 1.5, 1.5, hx('ffffff')); line(14, 14, 20, 20, hx('8a6a3a'), 2) end
-G.flake = function(c1, c2, d, l) for k = 0, 5 do local a = k * 1.047; line(12, 12, 12 + math.cos(a) * 9, 12 + math.sin(a) * 9, c1, 1); px(12 + math.cos(a) * 6 + math.cos(a + 1) * 2, 12 + math.sin(a) * 6 + math.sin(a + 1) * 2, c2) end; ell(12, 12, 2.5, 2.5, c2) end
-G.wings = function(c1, c2, d, l) ell(7, 9, 5, 4.5, c1); ell(17, 9, 5, 4.5, c1); ell(8, 16, 3.5, 3.5, c2); ell(16, 16, 3.5, 3.5, c2); line(12, 6, 12, 19, d, 1); ell(7, 9, 1.5, 1.5, l); ell(17, 9, 1.5, 1.5, l) end
+def put(img, x, y, c):
+    x, y = int(x), int(y)
+    if 1 <= x < S - 1 and 1 <= y < S - 1:
+        img.putpixel((x, y), c)
+def line(img, x0, y0, x1, y1, c):
+    n = int(max(abs(x1 - x0), abs(y1 - y0), 1))
+    for i in range(n + 1):
+        t = i / n
+        put(img, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, c)
+def rect(img, x0, y0, x1, y1, c, fill=True):
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if fill or y in (y0, y1) or x in (x0, x1):
+                put(img, x, y, c)
+def disc(img, cx, cy, r, c):
+    for y in range(S):
+        for x in range(S):
+            if (x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 <= r * r:
+                put(img, x, y, c)
+def circ(img, cx, cy, r, c):
+    for a in range(48):
+        t = a / 48 * 2 * math.pi
+        put(img, cx + math.cos(t) * r, cy + math.sin(t) * r, c)
 
-local BG = {
-  consumable = { '1a3a20', '0c1a10', '5dbb4a' },
-  basic = { '22283a', '10121c', '8a92b8' },
-  advanced = { '3a2a10', '1a1008', 'ffd23f' },
-}
+def glyph(img, g, c1, c2, d):
+    if g == 'blade':
+        for i in range(12): line(img, 6 + i, 17 - i, 7 + i, 17 - i, c1)
+        line(img, 5, 18, 9, 14, c2); line(img, 17, 5, 19, 4, c2)
+    elif g in ('chip', 'chipx'):
+        rect(img, 7, 7, 16, 16, d); rect(img, 7, 7, 16, 16, c1, False); rect(img, 10, 10, 13, 13, c2)
+        for k in (9, 12, 15):
+            line(img, 4, k - 1, 6, k - 1, c1); line(img, 17, k - 1, 19, k - 1, c1)
+            line(img, k - 1, 4, k - 1, 6, c1); line(img, k - 1, 17, k - 1, 19, c1)
+        if g == 'chipx': put(img, 11, 11, (255, 255, 255, 255)); put(img, 12, 12, (255, 255, 255, 255))
+    elif g == 'core':
+        disc(img, 12, 12, 7, d); circ(img, 12, 12, 7, c1); disc(img, 12, 12, 3, c2)
+        line(img, 12, 3, 12, 6, c1); line(img, 12, 18, 12, 21, c1)
+    elif g == 'cell':
+        rect(img, 8, 5, 15, 19, d); rect(img, 8, 5, 15, 19, c1, False); rect(img, 10, 3, 13, 4, c1)
+        rect(img, 10, 12, 13, 17, c2)
+    elif g == 'plate':
+        rect(img, 6, 6, 17, 13, d)
+        for y in range(14, 19): line(img, 6 + (y - 13), y, 17 - (y - 13), y, d)
+        rect(img, 6, 6, 17, 13, c1, False); line(img, 6, 13, 11, 18, c1); line(img, 17, 13, 12, 18, c1)
+        line(img, 12, 7, 12, 16, c2)
+    elif g == 'shield':
+        circ(img, 12, 12, 8, c1); circ(img, 12, 12, 6, c2); circ(img, 12, 12, 4, c1)
+    elif g == 'drop':
+        disc(img, 12, 14, 5, c1)
+        for y in range(5, 10): line(img, 12 - (y - 5) // 2, y, 12 + (y - 5) // 2, y, c1)
+        put(img, 10, 13, c2); put(img, 10, 14, c2)
+    elif g == 'fang':
+        for y in range(5, 19): line(img, 8, y, 8 + max(0, (19 - y) // 3), y, c1); line(img, 15, y, 15 + max(0, (19 - y) // 3), y, c1)
+        line(img, 7, 5, 18, 5, c2)
+    elif g == 'boot':
+        rect(img, 8, 4, 12, 14, c1); rect(img, 8, 15, 18, 18, c1); line(img, 5, 9, 7, 9, c2); line(img, 4, 12, 7, 12, c2)
+        line(img, 13, 16, 18, 16, c2)
+    elif g == 'scope':
+        circ(img, 12, 12, 7, c1); line(img, 12, 3, 12, 9, c2); line(img, 12, 15, 12, 21, c2)
+        line(img, 3, 12, 9, 12, c2); line(img, 15, 12, 21, 12, c2); put(img, 12, 12, c1)
+    elif g == 'lens':
+        disc(img, 12, 12, 7, d); circ(img, 12, 12, 7, c1); disc(img, 10, 10, 2, c2); circ(img, 12, 12, 4, c1)
+    elif g == 'mag':
+        rect(img, 8, 4, 15, 19, d); rect(img, 8, 4, 15, 19, c1, False)
+        for y in (7, 10, 13, 16): line(img, 10, y, 13, y, c2)
+    elif g == 'drill':
+        for y in range(5, 18): line(img, 12 - (y - 5) // 3, y, 12 + (y - 5) // 3, y, c1)
+        line(img, 8, 9, 16, 11, c2); line(img, 8, 13, 16, 15, c2); rect(img, 10, 18, 14, 20, c2)
+    elif g == 'coil':
+        for k in range(4): circ(img, 12, 6 + k * 4, 4, c1)
+        line(img, 12, 3, 14, 7, c2); line(img, 14, 7, 10, 12, c2); line(img, 10, 12, 13, 20, c2)
+    elif g == 'syringe':
+        line(img, 5, 19, 17, 7, c1); line(img, 6, 19, 18, 7, c1); line(img, 7, 18, 13, 12, c2)
+        line(img, 16, 5, 20, 9, c1); line(img, 3, 21, 5, 19, c2)
+    elif g == 'beacon':
+        rect(img, 10, 10, 13, 19, c1); circ(img, 12, 8, 3, c2); circ(img, 12, 8, 6, c1)
+    elif g == 'orb':
+        disc(img, 12, 12, 8, d); circ(img, 12, 12, 8, c1); disc(img, 12, 12, 4, c2); disc(img, 10, 10, 1.5, (255, 255, 255, 255))
+    elif g == 'flake':
+        for a in range(6):
+            t = a / 6 * 2 * math.pi
+            line(img, 12, 12, 12 + math.cos(t) * 8, 12 + math.sin(t) * 8, c1)
+            put(img, 12 + math.cos(t) * 5, 12 + math.sin(t) * 5, c2)
+        disc(img, 12, 12, 2, c2)
+    elif g == 'heart':
+        disc(img, 9, 10, 4, c1); disc(img, 15, 10, 4, c1)
+        for y in range(11, 20): line(img, 5 + (y - 11), y, 19 - (y - 11), y, c1)
+        put(img, 8, 9, c2); put(img, 9, 8, c2)
+    else:
+        disc(img, 12, 12, 6, c1)
 
-local function draw_icon(it)
-  img = Image(S, S, ColorMode.RGB)
-  local bg = BG[it.cat]
-  for y = 0, S - 1 do for x = 0, S - 1 do
-    local t = (x + y) / (2 * S)
-    local a, b = hx(bg[1]), hx(bg[2])
-    local r = app.pixelColor.rgbaR(a) * (1 - t) + app.pixelColor.rgbaR(b) * t
-    local g = app.pixelColor.rgbaG(a) * (1 - t) + app.pixelColor.rgbaG(b) * t
-    local bb = app.pixelColor.rgbaB(a) * (1 - t) + app.pixelColor.rgbaB(b) * t
-    img:drawPixel(x, y, rgba(math.floor(r), math.floor(g), math.floor(bb)))
-  end end
-  G[it.glyph](hx(it.c1), hx(it.c2), hx(it.c1, 0.45), hx(it.c1, 1.35))
-  for i = 0, S - 1 do
-    img:drawPixel(i, 0, hx(bg[3])); img:drawPixel(i, S - 1, OUT); img:drawPixel(0, i, hx(bg[3])); img:drawPixel(S - 1, i, OUT)
-  end
-  return img
-end
-
-'''
-
-LUA_TAIL = r'''
-local rows = math.ceil(#ITEMS / COLS)
-local sheet = Image(S * COLS, S * rows, ColorMode.RGB)
-for i, it in ipairs(ITEMS) do
-  local ic = draw_icon(it)
-  sheet:drawImage(ic, Point(((i - 1) % COLS) * S, math.floor((i - 1) / COLS) * S))
-end
-local spr = Sprite(S * COLS, S * rows, ColorMode.RGB)
-spr:newCel(spr.layers[1], spr.frames[1], sheet, Point(0, 0))
-app.refresh()
-'''
-
-data = ['local ITEMS = {']
+rows = (len(I) + COLS - 1) // COLS
+sheet = Image.new('RGBA', (COLS * S, rows * S), (0, 0, 0, 0))
+for n, it in enumerate(I):
+    img = Image.new('RGBA', (S, S), (10, 8, 22, 255))
+    fr = hexc(TIER_FRAME[it['cat']])
+    for k in range(S):
+        img.putpixel((k, 0), fr); img.putpixel((k, S - 1), fr); img.putpixel((0, k), fr); img.putpixel((S - 1, k), fr)
+    glyph(img, it['glyph'], hexc(it['c1']), hexc(it['c2']), hexc(it['c1'], 0.35))
+    sheet.paste(img, ((n % COLS) * S, (n // COLS) * S))
+sheet.save(os.path.join(ROOT, 'art', 'items.png'))
+print('items:', len(I), ' basic', sum(1 for i in I if i['cat'] == 'basic'), ' advanced', sum(1 for i in I if i['cat'] == 'advanced'),
+      ' ultimate', sum(1 for i in I if i['cat'] == 'ultimate'), ' upgrade', sum(1 for i in I if i['cat'] == 'upgrade'))
 for it in I:
-    data.append(f"  {{ id = '{it['id']}', cat = '{it['cat']}', glyph = '{it['glyph']}', c1 = '{it['c1']}', c2 = '{it['c2']}' }},")
-data.append('}')
-lua = LUA_HEAD.replace('''local function outline(col)
-  local solid = {}
-  for y = 0, S - 1 do for x = 0, S - 1 do solid[y * S + x] = app.pixelColor.rgbaA(img:getPixel(x, y)) == 255 and img:getPixel(x, y) ~= BG_MARK end end
-end
-''', '') + '\n'.join(data) + '\n' + LUA_TAIL
-os.makedirs(os.path.join(ROOT, 'tools'), exist_ok=True)
-open(os.path.join(ROOT, 'tools', 'neondrift_items.lua'), 'w').write(lua)
-print(len(I), 'items; price range', min(prices), '-', max(prices))
+    print(f"  {it['id']:<10} {it['name']:<6} {it['cat']:<9} {it['cost']:>5}  {it['stats']}  {it['special']}")
