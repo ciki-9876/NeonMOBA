@@ -46,12 +46,15 @@ static func play_map(a: Dictionary, b: Dictionary, map_id: String, rng: RandomNu
 	while score[0] < Rounds.ROUNDS_TO_WIN and score[1] < Rounds.ROUNDS_TO_WIN:
 		var w: int = 0 if rng.randf() < p else 1
 		score[w] += 1
-		var wipe: bool = rng.randf() < 0.3
+		# 2026-11-26 combat pass (lower TTK + revives): ~55% wipes, ~3 deaths per round
+		var wipe: bool = rng.randf() < 0.55
 		var lose_deaths: int = 3 if wipe else [0, 1, 1, 2, 2, 2][rng.randi() % 6]
 		var win_deaths: int = [0, 0, 0, 1, 1, 2][rng.randi() % 6]
 		var sides := [a, b]
 		_deaths(sides[w], sides[1 - w], mini(win_deaths, 2), st, rng)
 		_deaths(sides[1 - w], sides[w], lose_deaths, st, rng)
+		if rng.randf() < 0.3:  # a revived hero who goes down again
+			_deaths(sides[1 - w], sides[w], 1, st, rng)
 		for side in sides:
 			for i in 3:
 				var role: String = str(HeroesDB.HEROES[side["heroes"][i]]["role"])

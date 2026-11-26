@@ -94,6 +94,15 @@ func _unhandled_input(ev: InputEvent) -> void:
 			return
 		if shp.shop_open:
 			return
+		# round mode: the dead player decides on reviving (R = start the countdown, X = stay down)
+		if gm.player != null and gm.player.dead and gm.rounds != null and gm.player.revive_wait and not gm.autopilot:
+			if k == KEY_R:
+				if not gm.rounds.request_revive(gm.player):
+					hd.toast("本局复活次数已用完", Color(1.0, 0.6, 0.6), 2.0)
+				return
+			if k == KEY_X:
+				gm.rounds.decline_revive(gm.player)
+				return
 		var key_map := {KEY_Q: "q", KEY_E: "e", KEY_R: "r"}
 		if key_map.has(k):
 			var s: String = key_map[k]

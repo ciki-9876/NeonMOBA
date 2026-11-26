@@ -594,6 +594,8 @@ func damage(src, tgt, amount: float, kind: String, dtype := "magic", kb := Vecto
 			if bf != null and bf.focus == tgt:
 				src.stat_add("focus_dmg", a)
 		tgt.log_damage(src)
+		if tgt.is_hero and t - tgt.last_hurt > 3.0:
+			tgt.engage_t = t   # start of this fight for the TTK measure (first hit after 3 s without damage)
 		tgt.last_hurt = t
 		if kind != "dot":
 			tgt.flash = 0.06
@@ -619,6 +621,8 @@ func _hero_died(v, killer) -> void:
 	sfx("boom", 0.9, -4.0)
 	v.die()
 	v.deaths += 1
+	v.stat_add("ttk_sum", t - v.engage_t)
+	v.stat_add("ttk_n")
 	v.streak = 0
 	var k = null
 	if killer != null and is_instance_valid(killer) and killer.is_hero and killer.team != v.team:
@@ -649,6 +653,11 @@ func _hero_died(v, killer) -> void:
 		hh.assists += 1
 	rounds.on_hero_killed(v, k, helpers)
 	_kill_feed(v, k, kt)
+
+func _announce_revive(h) -> void:
+	var n: String = str(team_names[h.team]).trim_suffix("队")
+	_feed("%s %s 开始读秒复活（%d 秒，全队剩余 %d 次）" % [n, ("你" if h.is_player and not autopilot else h.display_name()), int(rounds.REVIVE_TIME), int(rounds.revives_left[h.team])],
+		Color(0.6, 1.8, 1.2) if h.team == 0 else Color(1.8, 1.0, 0.6))
 
 func _kill_feed(v, k, kt: int) -> void:
 	var kname: String = k.display_name() if k != null else "环境"

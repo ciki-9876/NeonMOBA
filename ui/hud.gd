@@ -486,7 +486,9 @@ func _update_board() -> void:
 			var names := []
 			for id in h.inv:
 				names.append(ItemsDB.DB[id]["name"])
-			var st := ("[color=#ff8080]阵亡 %ds[/color]" % int(ceil(h.respawn_t))) if h.dead else ""
+			var st := ""
+			if h.dead:
+				st = ("[color=#80ffb0]复活 %ds[/color]" % int(ceil(h.revive_t))) if h.revive_t >= 0.0 else "[color=#ff8080]阵亡[/color]"
 			var heal_txt := ("   治疗 %d" % int(h.heal_done)) if h.heal_done >= 1.0 else ""
 			txt += "  %s%s[color=#8a92b8]（%s）[/color]  Lv.%d   %d / %d / %d   金 %d%s   %s %s\n" % [
 				("[color=#ffff80]你·[/color]" if h.is_player else ""), h.display_name(), HeroesDB.ROLE_NAMES[h.role()], h.level, h.kills, h.deaths, h.assists, int(h.gold),
@@ -544,7 +546,17 @@ func _update_rounds_hud(p) -> void:
 	if b0 != null and r.phase == "live":
 		txt += "   ·   队伍指令：" + str({"group": "集结推进", "fight": "开团！", "hold": "等待", "retreat": "撤退", "setup": "卡位等待核心开放"}.get(b0.intent, ""))
 	event_lbl.text = txt
-	respawn_lbl.text = "阵亡 · 等待下一回合" if (p.dead and gm.state == C.S.PLAY and r.phase == "live") else ""
+	var rv := ""
+	if p.dead and gm.state == C.S.PLAY and r.phase == "live":
+		if p.revive_t >= 0.0:
+			rv = "复活倒计时 %d 秒" % int(ceil(p.revive_t))
+		elif p.revive_wait and not gm.autopilot and int(r.revives_left[p.team]) > 0:
+			rv = "已阵亡 · 按 R 读秒复活（%d 秒，全队本局还剩 %d 次）· 按 X 放弃" % [int(r.REVIVE_TIME), int(r.revives_left[p.team])]
+		else:
+			rv = "阵亡 · 等待下一回合"
+	respawn_lbl.text = rv
+	if r.phase == "live":
+		event_lbl.text = txt + "   ·   复活次数  %s %d / %s %d" % [_short(gm.team_names[0]), int(r.revives_left[0]), _short(gm.team_names[1]), int(r.revives_left[1])]
 	if board.visible and Engine.get_process_frames() % 15 == 0:
 		_update_board()
 

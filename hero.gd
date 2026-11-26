@@ -4,6 +4,7 @@ extends "res://unit.gd"
 
 const ItemsDB = preload("res://items_db.gd")
 const HeroesDB = preload("res://heroes_db.gd")
+const Tune = preload("res://game/tuning.gd")
 const PIXS := 3.0
 
 enum C { IDLE, MOVE, ATTACK, AMOVE, HOLD, CAST }
@@ -67,6 +68,10 @@ var dmg_log := {}
 var hurt_cd := 0.0
 var heal_done := 0.0
 var last_hurt := -99.0
+var revive_t := -1.0          # round mode: revive countdown (>= 0 while counting)
+var revive_wait := false      # round mode: dead, revive not decided yet
+var revive_ask_t := 0.0       # when the hero died (AI decision delay)
+var engage_t := 0.0           # when the current fight started for this hero (TTK statistics)
 ## round mode: a losing team may sell one item at full price during the next buy phase
 var refund_tokens := 0
 ## the player (选手) controlling this hero (game/profiles.gd); {} = none
@@ -89,7 +94,7 @@ func setup(game, id: String, tm: int, player: bool) -> void:
 	team = tm
 	is_player = player
 	is_hero = true
-	radius = float(def["radius"])
+	radius = float(def["radius"]) * Tune.HERO_RADIUS_MULT
 	base_col = def["col"]
 	var ks: Script = load(str(def["kit"]))
 	kit = ks.new()
@@ -97,7 +102,7 @@ func setup(game, id: String, tm: int, player: bool) -> void:
 	spr = Sprite2D.new()
 	spr.texture = g.TEX[def["sprite"]]
 	spr.hframes = 2
-	spr.scale = Vector2(PIXS, PIXS)
+	spr.scale = Vector2(PIXS, PIXS) * Tune.HERO_RADIUS_MULT
 	add_child(spr)
 	trail = Line2D.new()
 	trail.width = 10.0
@@ -211,7 +216,7 @@ func atk_range() -> float:
 	return float(ST.get("range", def["range"]))
 
 func move_speed() -> float:
-	var ms: float = float(ST.get("ms", 300.0))
+	var ms: float = float(ST.get("ms", 300.0)) * Tune.MS_MULT
 	if ms_buff_t > 0.0:
 		ms *= 1.0 + ms_buff_pct
 	ms *= 1.0 + buff_v("haste")
@@ -606,7 +611,7 @@ func melee_arc() -> float:
 	return deg_to_rad(float(ST.get("arc", def.get("arc", 100.0))))
 
 func proj_speed() -> float:
-	return float(ST.get("pspd", def.get("proj_speed", 1100.0)))
+	return float(ST.get("pspd", def.get("proj_speed", 1100.0))) * Tune.BOLT_SPEED_MULT
 
 ## perception radius (AI) and camera height (player)
 func vision() -> float:
@@ -688,6 +693,8 @@ func steer_point(p: Vector2) -> Vector2:
 # ============================================================ update
 func update(d: float) -> void:
 	if dead:
+		for s in cds:   # cooldowns keep running while dead: a revive does not refresh them
+			cds[s] = maxf(0.0, float(cds[s]) - d)
 		return
 	_prev_pos = position
 	tick_status(d)

@@ -720,6 +720,14 @@ const ARMOR_ITEMS := ["plate", "reactive", "tboots", "drill", "permafrost"]
 const MR_ITEMS := ["coat", "barrier", "permafrost"]
 ## 1 = adapts its build to the opponent after a lost round (tuning: --ai_b adapt=0 turns it off)
 var adapt := 1.0
+
+## round-mode revive decision (game/rounds.gd ai_wants_revive): thinking time and misjudgement grow with a
+## poor decision-making attribute (decide_err 0.04 .. 0.6)
+func revive_delay() -> float:
+	return 0.6 + decide_err * 3.0
+
+func revive_noise() -> float:
+	return 0.05 + decide_err * 0.5
 var _cover_end := -1.0      # cover is a short break of line of sight per retreat, not a place to camp
 
 func _shop() -> void:

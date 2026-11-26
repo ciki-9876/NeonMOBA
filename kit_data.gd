@@ -1,4 +1,5 @@
 extends "res://kit_base.gd"
+const Tune = preload("res://game/tuning.gd")
 ## Data-driven kit — the "skill effect assembly" system.
 ## A hero using this kit has NO hero-specific code: every skill is a list of effect blocks in
 ## heroes_db.gd, assembled from a small vocabulary. The same data also drives:
@@ -246,7 +247,7 @@ func _do(e: Dictionary, ctx: Dictionary) -> void:
 				g.displace(u, cpos + away * gap, val(e.get("speed", 1600.0), lv))
 		"shot":
 			h.stat_add("shot_fired")
-			shots.append({"pos": ctx["origin"], "dir": ctx["dir"], "speed": val(e.get("speed", 1400.0), lv),
+			shots.append({"pos": ctx["origin"], "dir": ctx["dir"], "speed": val(e.get("speed", 1400.0), lv) * Tune.SHOT_SPEED_MULT,
 				"left": val(e.get("len", 900.0), lv), "w": val(e.get("w", 60.0), lv), "col": _col(e),
 				"pierce": bool(e.get("pierce", false)), "then": e.get("then", []), "ctx": ctx.duplicate(), "hit": {}, "trail": []})
 		"delay":
