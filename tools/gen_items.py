@@ -68,7 +68,7 @@ item('reso', '共振透镜', 'advanced', 'pow', 'lens', 'b060ff', '60e0ff', {'po
 item('reactive', '反应装甲', 'advanced', 'def', 'plate', 'a0b0c8', 'ffd23f', {'def': 25, 'hp': 200}, ['plate', 'battery'], 670,
      {'tenacity': 0.2}, '韧性：受到的控制时间 -20%')
 item('barrier', '屏障发生器', 'advanced', 'def', 'shield', '6ad8ff', 'ffd23f', {'res': 25, 'hp': 200}, ['coat', 'battery'], 670,
-     {'spell_shield': 200.0}, '每回合第一次受到技能伤害时获得 200 点护盾')
+     {'spell_shield': 150.0}, '每回合第一次受到技能伤害时获得 150 点护盾（4 秒）')
 item('pod', '再生舱', 'advanced', 'def', 'drop', '5dff7a', 'ff4a5a', {'hp': 250, 'hpr': 5}, ['gel', 'battery'], 600,
      {'regen_ooc': 2.0}, '脱离战斗 3 秒后生命回复翻倍')
 item('gauntlet', '吸能护手', 'advanced', 'dmg', 'fang', 'c02a4a', 'ffd23f', {'atk': 12, 'ls': 10}, ['leech', 'blade'], 510,
@@ -86,7 +86,7 @@ item('beacon', '支援信标', 'advanced', 'pow', 'beacon', '5dff7a', 'ffd23f', 
 item('annihil', '歼灭者', 'ultimate', 'dmg', 'blade', 'ffd23f', 'ff3a3a', {'atk': 45, 'as': 20}, ['rage', 'blade'], 2000,
      {'crit': [0.3, 2.2]}, '普攻有 30% 几率造成 220% 伤害')
 item('storm', '风暴核心', 'ultimate', 'spd', 'coil', 'ffd23f', '6ad8ff', {'as': 60}, ['coil', 'chip'], 1825,
-     {'arc': [3, 5, 60.0]}, '每第 3 次普攻命中释放连锁电弧，弹跳 5 次，每次 60 法术伤害')
+     {'arc': [3, 5, 80.0]}, '每第 3 次普攻命中释放连锁电弧，弹跳 5 次，每次 80 法术伤害')
 item('singular', '奇点透镜', 'ultimate', 'pow', 'orb', 'b060ff', 'ffffff', {'pow': 35, 'mana': 250, 'cdr': 20}, ['qcirc', 'core'], 2300,
      {'spell_vamp': 0.15}, '技能伤害的 15% 转为生命')
 item('permafrost', '永冻之心', 'ultimate', 'def', 'flake', '6ad8ff', 'ffffff', {'def': 45, 'res': 25, 'hp': 250},

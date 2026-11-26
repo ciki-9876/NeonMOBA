@@ -8,6 +8,7 @@ extends Node2D
 ##   ui/shop_ui.gd          shop & inventory UI
 ##   ui/menus.gd            menus and match setup
 ##   input/player_input.gd  player control and debug keys
+##   ui/league_ui.gd        league season screens (stage 2), logic in game/league/
 ## Architecture notes: docs/架构说明.md
 
 const C = preload("res://game/consts.gd")
@@ -17,6 +18,7 @@ const Hud = preload("res://ui/hud.gd")
 const ShopUI = preload("res://ui/shop_ui.gd")
 const Menus = preload("res://ui/menus.gd")
 const PlayerInput = preload("res://input/player_input.gd")
+const LeagueUI = preload("res://ui/league_ui.gd")
 
 ## at most this many simulation steps per rendered frame (prevents a spiral after a hitch)
 const MAX_STEPS := 6
@@ -28,6 +30,7 @@ var hd: Hud
 var shp: ShopUI
 var mnu: Menus
 var inp: PlayerInput
+var lg: LeagueUI
 var acc := 0.0
 
 func _ready() -> void:
@@ -37,12 +40,13 @@ func _ready() -> void:
 	shp = ShopUI.new()
 	mnu = Menus.new()
 	inp = PlayerInput.new()
+	lg = LeagueUI.new()
 	gm.vw = vw
 	gm.hd = hd
 	gm.shp = shp
-	for m in [vw, hd, shp, mnu, inp]:
+	for m in [vw, hd, shp, mnu, inp, lg]:
 		m.gm = gm
-		for f in ["vw", "hd", "shp", "mnu", "inp"]:
+		for f in ["vw", "hd", "shp", "mnu", "inp", "lg"]:
 			if f in m and m.get(f) == null and get(f) != m:
 				m.set(f, get(f))
 		if "app" in m:
@@ -63,6 +67,7 @@ func _ready() -> void:
 	add_child(hd)
 	add_child(shp)
 	add_child(mnu)
+	add_child(lg)
 	gm.world_cleared.connect(vw._v_world_cleared)
 	gm.world_cleared.connect(hd._hud_world_cleared)
 	gm.world_cleared.connect(inp._inp_world_cleared)
@@ -76,6 +81,7 @@ func _ready() -> void:
 	gm.round_ended.connect(hd._hud_round_ended)
 	hd._build_ui()
 	mnu._build_menu()
+	lg.build()
 	vw._build_audio()
 	hd._load_best()
 	mnu._show_menu()

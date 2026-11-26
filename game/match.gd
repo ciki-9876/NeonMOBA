@@ -68,6 +68,8 @@ var winner := -1
 var difficulty := 1
 var brains := {}
 var last_cfg := {}
+## display names of team 0 / team 1 (league matches pass the real team names)
+var team_names := ["霓虹队", "赤潮队"]
 func _slice(path: String, rows: Array) -> void:
 	var atlas: Texture2D = load(path)
 	var y := 0
@@ -89,6 +91,7 @@ func _load_assets() -> void:
 	_slice("res://art/heroes.png", C.HERO_ROWS)
 	_slice("res://art/heroes2.png", C.HERO_ROWS2)
 	_slice("res://art/heroes3.png", C.HERO_ROWS3)
+	_slice("res://art/heroes4.png", C.HERO_ROWS4)
 	var icons: Texture2D = load("res://art/items.png")
 	var order: Array = ItemsDB.ORDER
 	for i in order.size():
@@ -182,6 +185,7 @@ func _start_rounds(a: Array, b: Array, diff: int, match_seed := -1, setup := {})
 	terrain.setup(Maps.MAPS[map_id], C.ARENA_R)
 	_vis = [{}, {}]
 	var human: bool = bool(setup.get("human", true))
+	team_names = setup.get("team_names", ["霓虹队", "赤潮队"])
 	var profs: Array = setup.get("profiles", [[], []])
 	var runes: Array = setup.get("runes", [{}, {}])
 	for tm in 2:

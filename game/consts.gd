@@ -43,6 +43,13 @@ const HERO_ROWS3 := [
 	["tide_q", 32, 32, 1], ["tide_w", 32, 32, 1], ["tide_e", 32, 32, 1], ["tide_r", 32, 32, 1],
 ]
 
+const HERO_ROWS4 := [
+	["rail", 18, 18, 2], ["falcon", 18, 18, 2], ["echo", 18, 18, 2],
+	["rail_q", 32, 32, 1], ["rail_w", 32, 32, 1], ["rail_e", 32, 32, 1], ["rail_r", 32, 32, 1],
+	["falcon_q", 32, 32, 1], ["falcon_w", 32, 32, 1], ["falcon_e", 32, 32, 1], ["falcon_r", 32, 32, 1],
+	["echo_q", 32, 32, 1], ["echo_w", 32, 32, 1], ["echo_e", 32, 32, 1], ["echo_r", 32, 32, 1],
+]
+
 const HERO_ROWS := [
 	["blade", 18, 18, 2], ["b_icon_q", 32, 32, 1], ["b_icon_w", 32, 32, 1], ["b_icon_e", 32, 32, 1], ["b_icon_r", 32, 32, 1],
 	["mark", 9, 9, 1],

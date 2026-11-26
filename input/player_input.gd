@@ -37,19 +37,25 @@ var marker_pos := Vector2.ZERO
 var marker_t := 0.0
 var marker_col := Color.GREEN
 # ============================================================ input
+func _league() -> bool:
+	return app != null and "lg" in app and app.lg != null and app.lg.active()
+
 func _unhandled_input(ev: InputEvent) -> void:
 	if ev is InputEventKey and ev.pressed and not ev.echo:
 		var k: int = ev.physical_keycode
 		if gm.state == C.S.MENU:
 			if k == KEY_1: mnu._open_select(C.M.ROUNDS)
 			elif k == KEY_2: mnu.open_exp3c()
+			elif k == KEY_3: mnu.open_league()
 			return
 		if gm.state == C.S.SELECT:
 			if k == KEY_ESCAPE: mnu._show_menu()
 			return
 		if gm.state == C.S.END:
 			if gm.dead_timer > 0.6:
-				if k == KEY_R or k == KEY_SPACE or k == KEY_ENTER: gm._restart()
+				if _league():
+					if k in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER, KEY_ESCAPE]: app.lg.on_match_done()
+				elif k == KEY_R or k == KEY_SPACE or k == KEY_ENTER: gm._restart()
 				elif k == KEY_ESCAPE: mnu._show_menu()
 			return
 		if k == KEY_ESCAPE:
@@ -65,12 +71,15 @@ func _unhandled_input(ev: InputEvent) -> void:
 				hd.center_lbl.label_settings.font_color = Color(0.4, 1.0, 1.0)
 				hd.center_lbl.modulate.a = 1.0
 				hd.center_lbl.text = "暂停" if gm.paused else ""
-				hd.sub_lbl.text = "[ Esc 继续    Q 退出到菜单 ]" if gm.paused else ""
+				hd.sub_lbl.text = ("[ Esc 继续    Q 结束本图（剩余部分直接出结果） ]" if _league() else "[ Esc 继续    Q 退出到菜单 ]") if gm.paused else ""
 			return
 		if gm.paused:
 			if k == KEY_Q:
 				gm.paused = false
-				mnu._show_menu()
+				if _league():
+					app.lg.on_match_done(true)   # the rest of this map is decided by the instant resolver
+				else:
+					mnu._show_menu()
 			return
 		if k == KEY_B:
 			if shp.shop_open: shp._close_shop()
@@ -92,6 +101,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 				_learn(s)
 			else:
 				_press(s)
+		elif k == KEY_F6 and bool(gm.last_cfg.get("setup", {}).get("league_watch", false)):
+			hd.toast("观战中：比赛由 AI 进行", Color(0.6, 1.0, 1.0), 2.0)
 		elif k == KEY_F6:
 			gm.set_autopilot(not gm.autopilot)
 			hd.toast("AI 托管：%s（F6 切换）" % ("开" if gm.autopilot else "关"), Color(0.6, 1.0, 1.0), 2.5)

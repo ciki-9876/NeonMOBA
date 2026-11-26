@@ -14,12 +14,12 @@ extends "res://kit_base.gd"
 ##   damage {amt, amt_hp (fraction of caster max hp), dtype: magic|phys|pure}
 ##   heal {amt, pct (of target max hp)}            barrier {amt, amt_hp, dur}
 ##   stun {dur}  root {dur}  slow {pct, dur}  silence {dur}  taunt {dur}  banish {dur}  cleanse {strong}
-##   buff {id: haste|as|armor|dr|regen, v, dur}    status {id: mark|charged, dur}
+##   buff {id: haste|as|def|res|dr|regen, v, dur}    status {id: mark|charged, dur}
 ##   dash {to: target|pos, speed, max, then:[...]}           pull {to: caster|pos, speed}
 ##   shot {speed, len, w, col, pierce, then:[...]}  (skillshot; "then" runs on each unit hit)
 ##   delay {t, r, col, then:[...]}                 zone {dur, tick, r, col, at, follow, each:[...]}
 ##   fx {kind: ring|burst, at, r, col}              sfx {name, pitch, vol}      shake {v}
-## Passive skill: "passive": {dr, regen, def, as, ms, aura: {id, v, r}}
+## Passive skill: "passive": {dr, regen, def, res, as, ms, aura: {id, v, r}}
 
 var shots: Array = []
 var zones: Array = []
@@ -91,6 +91,7 @@ func stat_mods(n: Dictionary) -> void:
 		if p.has("regen"): n["hpr"] = float(n["hpr"]) + val(p["regen"], lv)
 		if p.has("as"): n["as"] = float(n["as"]) + val(p["as"], lv)
 		if p.has("ms"): n["ms"] = float(n["ms"]) + val(p["ms"], lv)
+		if p.has("res"): n["res"] = float(n["res"]) + val(p["res"], lv)
 
 func tick(d: float) -> void:
 	aura_t -= d
@@ -570,8 +571,10 @@ func tip(s: String) -> String:
 		var bits := []
 		if p.has("dr"): bits.append("受到的伤害 -%s" % _pct(p["dr"]))
 		if p.has("def"): bits.append("物理防御 +%s" % _vals(p["def"]))
+		if p.has("res"): bits.append("法术防御 +%s" % _vals(p["res"]))
 		if p.has("regen"): bits.append("生命回复 +%s" % _vals(p["regen"]))
-		if p.has("as"): bits.append("攻速 +%s" % _vals(p["as"]))
+		if p.has("as"): bits.append("攻速 +%s%%" % _vals(p["as"]))
+		if p.has("ms"): bits.append("移速 +%s" % _vals(p["ms"]))
 		if p.has("aura"):
 			var a: Dictionary = p["aura"]
 			bits.append("光环：%s 范围内的友方%s +%s" % [_n(float(a.get("r", 700))), BUFF_NAMES.get(str(a["id"]), str(a["id"])), _vals(a["v"])])

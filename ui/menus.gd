@@ -67,6 +67,9 @@ func _build_menu() -> void:
 	var b3 := _menu_btn("回合制 3V3   [1]", 400, 64, 24)
 	b3.pressed.connect(_open_select.bind(C.M.ROUNDS))
 	menu_main.add_child(b3)
+	var b5 := _menu_btn("联赛赛季   [3]", 400, 64, 24)
+	b5.pressed.connect(open_league)
+	menu_main.add_child(b5)
 	var b4 := _menu_btn("3C 实验 · WASD 狙击手   [2]", 400, 64, 24)
 	b4.pressed.connect(open_exp3c)
 	menu_main.add_child(b4)
@@ -149,7 +152,14 @@ func _build_menu() -> void:
 	hd._place(rule, Control.PRESET_CENTER_BOTTOM, -500, -90, 1000, 30)
 	menu_arena.add_child(rule)
 
+## stage 2: league season (ui/league_ui.gd)
+func open_league() -> void:
+	if app != null and "lg" in app:
+		app.lg.open()
+
 func _show_menu() -> void:
+	if app != null and "lg" in app and app.lg != null:
+		app.lg.hide()
 	gm.state = C.S.MENU
 	gm._clear_world()
 	vw.overlay.queue_redraw()

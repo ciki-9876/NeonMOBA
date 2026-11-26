@@ -343,8 +343,11 @@ func _hud_match_ended(win: bool) -> void:
 		center_lbl.label_settings.font_color = Color(1.0, 0.35, 0.6)
 		center_lbl.text = "DEFEAT"
 	if gm.rounds != null:
-		sub_lbl.text = "回合  霓虹队  %d  :  %d  赤潮队     用时 %s\n\n你：%s   %d / %d / %d\n\n[ R 再来一局    Esc 返回菜单 ]" % [
-			gm.rounds.score[0], gm.rounds.score[1], _fmt(gm.t), gm.player.display_name(), gm.player.kills, gm.player.deaths, gm.player.assists]
+		var league: bool = bool(gm.last_cfg.get("setup", {}).get("league", false))
+		sub_lbl.text = "回合  %s  %d  :  %d  %s     用时 %s\n\n%s：%s   %d / %d / %d\n\n%s" % [
+			gm.team_names[0], gm.rounds.score[0], gm.rounds.score[1], gm.team_names[1], _fmt(gm.t),
+			("你" if not gm.autopilot else str(gm.player.profile.get("name", "你"))), gm.player.display_name(), gm.player.kills, gm.player.deaths, gm.player.assists,
+			"[ 回车 返回赛事 ]" if league else "[ R 再来一局    Esc 返回菜单 ]"]
 
 func _feed(text: String, col: Color) -> void:
 	var l := _label(16, col, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -472,7 +475,7 @@ func _update_board() -> void:
 		txt = "[center][b][color=#ffd23f]计分板[/color][/b]   [color=#8a92b8]第 %d 回合 · 回合比分 %d : %d · 先赢 %d 回合获胜[/color][/center]\n" % [gm.rounds.round_n, gm.rounds.score[0], gm.rounds.score[1], gm.rounds.ROUNDS_TO_WIN]
 	for tm in 2:
 		var hc := "#5fe8ff" if tm == 0 else "#ff6a6a"
-		txt += "\n[color=%s][b]%s  %d[/b][/color]\n" % [hc, ("霓虹队" if tm == 0 else "赤潮队"), gm.team_kills[tm]]
+		txt += "\n[color=%s][b]%s  %d[/b][/color]\n" % [hc, str(gm.team_names[tm]), gm.team_kills[tm]]
 		for h in gm.heroes:
 			if h.team != tm: continue
 			var names := []
@@ -547,7 +550,7 @@ func _hud_round_live(_n: int) -> void:
 func _hud_round_ended(_n: int, w: int, reason: String) -> void:
 	var r = gm.rounds
 	var col := Color(0.4, 1.6, 2.0) if w == 0 else (Color(2.0, 0.5, 0.5) if w == 1 else Color(1.4, 1.4, 1.4))
-	var who := "霓虹队" if w == 0 else ("赤潮队" if w == 1 else "双方")
+	var who: String = str(gm.team_names[w]) if w in [0, 1] else "双方"
 	_announce("%s 赢下本回合（%s）" % [who, reason] if w >= 0 else "平局（%s）" % reason, col, 2.0)
 	if gm.player != null:
 		var streak: int = r.loss_streak[gm.player.team]

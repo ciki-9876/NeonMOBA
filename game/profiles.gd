@@ -12,7 +12,7 @@ const ATTR_NAMES := {"reaction": "反应", "mechanics": "操作", "awareness": "
 
 ## proficiency stages: [min proficiency, name, ability multiplier]
 ## calibrated: 生疏 vs 精通 on the same player should cost roughly 10–15% win rate (stage 1 batch)
-const STAGES := [[0, "生疏", 0.88], [25, "熟悉", 0.94], [60, "精通", 1.00], [90, "大师", 1.03]]
+const STAGES := [[0, "生疏", 0.82], [25, "熟悉", 0.90], [60, "精通", 1.00], [90, "大师", 1.03]]
 const SIG_PROF_BONUS := 2.0      # signature heroes gain proficiency twice as fast (training, stage 3)
 
 static func make(pname: String, v: int, prof := {}, sig := {}) -> Dictionary:
