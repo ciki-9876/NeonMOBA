@@ -13,6 +13,7 @@ var phase := "start"
 var wait := 0
 
 func _initialize() -> void:
+	load("res://game/save.gd").delete()     # start from a fresh season, not from an old autosave
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 
@@ -38,9 +39,16 @@ func _process(_d: float) -> bool:
 			if f == 5:
 				key(KEY_3)
 			elif f == 10:
-				for t in ["table", "teams", "stats", "news", "schedule"]:
+				for t in ["table", "teams", "stats", "news", "training", "schedule"]:
 					lg._set_tab(t)
 				note("hub ok: %s" % lg.title.text)
+				var tm = lg.season["world"]["teams"][0]
+				lg._set_tab("training")
+				load("res://game/league/training.gd").set_plan(lg.season, str(tm["players"][0]), "attr:reaction")
+				lg._set_tab("training")
+				lg._open_series(Season.human_series(lg.season))
+				note("trained: %s" % str(load("res://game/league/training.gd").committed(lg.season)))
+				lg._set_tab("training")
 				lg._open_series(Season.human_series(lg.season))
 				phase = "veto"
 		"veto":

@@ -15,6 +15,8 @@ const World = preload("res://game/league/world.gd")
 const QuickSim = preload("res://game/league/quick_sim.gd")
 const Bridge = preload("res://game/league/match_bridge.gd")
 const Stories = preload("res://game/league/stories.gd")
+const Training = preload("res://game/league/training.gd")
+const Save = preload("res://game/save.gd")
 
 const MatchT = preload("res://game/match.gd")
 var gm: MatchT
@@ -70,7 +72,7 @@ func build() -> void:
 	tabs_box = HBoxContainer.new()
 	tabs_box.add_theme_constant_override("separation", 6)
 	top.add_child(tabs_box)
-	for t in [["schedule", "赛程"], ["table", "积分榜"], ["teams", "战队"], ["stats", "数据"], ["news", "新闻"]]:
+	for t in [["schedule", "赛程"], ["training", "训练"], ["table", "积分榜"], ["teams", "战队"], ["stats", "数据"], ["news", "新闻"]]:
 		var b := shp._small_btn(t[1], 76)
 		b.pressed.connect(_set_tab.bind(t[0]))
 		tabs_box.add_child(b)
@@ -101,7 +103,10 @@ func build() -> void:
 ## main menu [3]: continue the running season or start a new one
 func open() -> void:
 	if season.is_empty():
-		season = Season.create(int(Time.get_unix_time_from_system()) % 1000000)
+		season = Save.load_season()          # the autosave of the last session, if there is one
+		if season.is_empty():
+			season = Season.create(int(Time.get_unix_time_from_system()) % 1000000)
+	Training.ensure(season)
 	gm.state = C.S.SELECT
 	gm._clear_world()
 	_redraw_world()
@@ -128,9 +133,28 @@ func _to_menu() -> void:
 
 func new_season() -> void:
 	season = Season.create(int(Time.get_unix_time_from_system()) % 1000000)
+	confirm_new = false
 	view = "hub"
 	tab = "news"
 	refresh()
+
+var confirm_new := false   # "放弃并重开" needs a second click within 4 seconds
+var save_ok := true
+
+func _autosave() -> void:
+	save_ok = Save.save_season(season)
+
+func _confirm_new() -> void:
+	if confirm_new:
+		new_season()
+		return
+	confirm_new = true
+	refresh()
+	get_tree().create_timer(4.0).timeout.connect(func():
+		if confirm_new:
+			confirm_new = false
+			if root != null and root.visible and view == "hub":
+				refresh())
 
 func _set_tab(t: String) -> void:
 	tab = t
@@ -191,6 +215,7 @@ func refresh() -> void:
 		return
 	match tab:
 		"schedule": _show_schedule()
+		"training": _show_training()
 		"table": _show_table()
 		"teams": _show_teams()
 		"stats": _show_stats()
@@ -198,6 +223,10 @@ func refresh() -> void:
 	_hub_actions()
 
 func _hub_actions() -> void:
+	_autosave()
+	title.text += "  · 已自动存档" if save_ok else "  · 存档失败"
+	if str(season["phase"]) != "done":
+		actions.add_child(_btn("确认放弃？再点一次" if confirm_new else "放弃并重开", _confirm_new, 170))
 	if str(season["phase"]) == "done":
 		status.text = "赛季已经结束。可以查看新闻里的赛季奖项，或者开始新赛季（重新生成选手和战队）。"
 		actions.add_child(_btn("开始新赛季", new_season, 160))
@@ -268,6 +297,72 @@ func _show_schedule() -> void:
 				if str(s["a"]) == str(season["human"]) or str(s["b"]) == str(season["human"]):
 					t2 += "第 %d 周   %s\n" % [w + 1, _series_line(s)]
 		body.add_child(_rt(t2, 14))
+
+func _show_training() -> void:
+	var team: Dictionary = World.team(season["world"], str(season["human"]))
+	var tr: Dictionary = Training.ensure(season)
+	var locked: bool = Training.committed(season)
+	body.add_child(_rt("[b]训练安排[/b]   [color=#8a92b8]%s[/color]" % _stage_label(), 17))
+	body.add_child(_rt("[color=#8a92b8]每名选手每周一项：练一项能力、练一个英雄的熟练度，或者休息。训练在你进入本周比赛时结算。\n疲劳超过 40 训练效率下降；达到 70 比赛时能力 -1，达到 90 能力 -2；休息可以恢复 35。擅长英雄（★）的熟练度成长 ×2，年轻选手成长更快。[/color]", 13))
+	if locked:
+		body.add_child(_rt("[color=#ffd23f]本周训练已经结算。进入下一轮后可以重新安排。[/color]", 14))
+	for pid in team["players"]:
+		var p: Dictionary = season["world"]["players"][pid]
+		var f: float = float(p.get("fatigue", 0.0))
+		var fcol := "#6aff8a" if f < 40.0 else ("#ffd23f" if f < 70.0 else "#ff6a6a")
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var attrs := []
+		for k in Profiles.ATTRS:
+			attrs.append("%s %d" % [Profiles.ATTR_NAMES[k], int(p["attrs"][k])])
+		var l := _rt("[color=%s]%s[/color] [b]%s[/b] %d 岁   能力 %.1f   疲劳 [color=%s]%d[/color]\n[color=#8a92b8]%s[/color]" % [
+			ROLE_COL[p["role"]], HeroesDB.ROLE_NAMES[p["role"]], p["name"], int(p["age"]), World.rating(p), fcol, int(f), "  ".join(PackedStringArray(attrs))], 14)
+		l.custom_minimum_size = Vector2(560, 46)
+		l.size_flags_horizontal = Control.SIZE_FILL
+		row.add_child(l)
+		var ob := OptionButton.new()
+		ob.custom_minimum_size = Vector2(280, 34)
+		ob.add_item("自动安排")
+		ob.set_item_metadata(0, "")
+		var cur_plan: String = Training.plan_of(season, pid)
+		var sel := 0
+		var opts: Array = Training.options(p)
+		for i in opts.size():
+			ob.add_item(str(opts[i][1]))
+			ob.set_item_metadata(i + 1, str(opts[i][0]))
+			if str(opts[i][0]) == cur_plan:
+				sel = i + 1
+		ob.select(sel)
+		ob.disabled = locked
+		ob.item_selected.connect(func(idx: int): Training.set_plan(season, str(pid), str(ob.get_item_metadata(idx))))
+		row.add_child(ob)
+		body.add_child(row)
+	var brow := HBoxContainer.new()
+	brow.add_theme_constant_override("separation", 10)
+	var b1 := _btn("全部自动安排", _plan_all.bind("auto"), 150)
+	var b2 := _btn("全员休息", _plan_all.bind("rest"), 120)
+	b1.disabled = locked
+	b2.disabled = locked
+	brow.add_child(b1)
+	brow.add_child(b2)
+	body.add_child(brow)
+	var log: Array = tr.get("log", [])
+	if not log.is_empty():
+		var key: int = int(tr.get("log_key", -1))
+		var when := "第 %d 周" % (key + 1) if key < 100 else "季后赛"
+		var txt := "\n[b]上次训练结果[/b]  [color=#8a92b8]%s[/color]\n" % when
+		for e in log:
+			var p2: Dictionary = season["world"]["players"][str(e["pid"])]
+			txt += "  [b]%s[/b]  %s   %s\n" % [p2["name"], Training.plan_text(str(e["plan"])), str(e["text"])]
+		body.add_child(_rt(txt, 14))
+
+func _plan_all(kind: String) -> void:
+	var team: Dictionary = World.team(season["world"], str(season["human"]))
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	for pid in team["players"]:
+		Training.set_plan(season, str(pid), "rest" if kind == "rest" else "")
+	refresh()
 
 func _show_table() -> void:
 	var txt := "[b]积分榜[/b]（系列赛胜负 → 小分差；前四名进入季后赛）\n[table=6]"
@@ -370,6 +465,8 @@ func _open_series(s: Dictionary) -> void:
 	elif str(s["b"]) == str(season["human"]):
 		human_side = 1
 	view = "series"
+	if human_side >= 0:
+		Training.commit_human(season)   # the team trains, then plays
 	refresh()
 	_kick_ai()
 
@@ -577,6 +674,7 @@ func _record(res: Dictionary) -> void:
 	Series.record_map(cur, res)
 	if Series.done(cur):
 		Season.finish_series(season, cur)
+	_autosave()
 	refresh()
 	_kick_ai()
 

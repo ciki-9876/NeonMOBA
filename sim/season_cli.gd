@@ -4,19 +4,24 @@ extends SceneTree
 ##   --full K     the human team's first K series are played as real matches (game/match.gd, AI on both sides)
 ##                instead of the instant resolver: exercises the draft -> match -> result path end to end
 ##   --seasons S  run S seasons (seeds N, N+1, ...) and print aggregate checks only
+##   --train S    with --seasons: how the human team trains: none | auto | smart (default auto); prints its results
 ##   --calib M    compare the quick resolver with the full simulation on M maps of random drafted lineups
 const Season = preload("res://game/league/season.gd")
 const Series = preload("res://game/league/series.gd")
 const Bridge = preload("res://game/league/match_bridge.gd")
 const QuickSim = preload("res://game/league/quick_sim.gd")
 const Stories = preload("res://game/league/stories.gd")
+const Training = preload("res://game/league/training.gd")
+const World = preload("res://game/league/world.gd")
+const HeroesDB = preload("res://heroes_db.gd")
+const Profiles = preload("res://game/profiles.gd")
 const MatchT = preload("res://game/match.gd")
 const C = preload("res://game/consts.gd")
 
 var gm: MatchT
 
 func _initialize() -> void:
-	var opt := {"seed": "1", "full": "0", "seasons": "1", "out": "", "calib": "0"}
+	var opt := {"seed": "1", "full": "0", "seasons": "1", "out": "", "calib": "0", "train": ""}
 	var args := OS.get_cmdline_user_args()
 	var i := 0
 	while i < args.size():
@@ -31,6 +36,10 @@ func _initialize() -> void:
 		quit()
 		return
 	var n_s := int(opt["seasons"])
+	if str(opt["train"]) != "":
+		_train_test(n_s, int(opt["seed"]), str(opt["train"]))
+		quit()
+		return
 	if n_s > 1:
 		_many(n_s, int(opt["seed"]))
 		quit()
@@ -156,3 +165,73 @@ func _calib(m: int, seed0: int) -> void:
 	for r in rows:
 		brier += pow(float(r[1]) - float(r[2]), 2)
 	print("maps %d  full A wins %d  quick mean P(A) %.2f  brier %.3f (coin 0.250)" % [n, full_w, quick_p / maxf(1, n), brier / maxf(1, n)])
+
+
+## the human team's plan for this stage under a strategy
+func _plan_for(season: Dictionary, strategy: String, rng: RandomNumberGenerator) -> void:
+	var team: Dictionary = World.team(season["world"], str(season["human"]))
+	for pid in team["players"]:
+		var p: Dictionary = season["world"]["players"][pid]
+		var plan := "none"
+		match strategy:
+			"auto":
+				plan = ""   # Training.commit_human falls back to auto_plan
+			"smart":
+				if float(p["fatigue"]) >= 66.0:
+					plan = "rest"
+				else:
+					# main heroes first (the two best of the role that are not mastered), then the weakest ability
+					var best := ""
+					var best_v := -1.0
+					for hid in p["prof"]:
+						var pr: float = float(p["prof"][hid])
+						if str(HeroesDB.HEROES[hid]["role"]) == str(p["role"]) and pr < 88.0 and pr > best_v:
+							best_v = pr
+							best = str(hid)
+					var weakest := str(Profiles.ATTRS[0])
+					for k in Profiles.ATTRS:
+						if int(p["attrs"][k]) < int(p["attrs"][weakest]):
+							weakest = str(k)
+					plan = ("hero:" + best) if (best != "" and best_v < 78.0) else ("attr:" + weakest)
+		if plan != "":
+			Training.set_plan(season, str(pid), plan)
+
+## n seasons, the human team (tier 3) follows a training strategy; prints its average rank / series win % / abilities
+func _train_test(n: int, seed0: int, strategy: String) -> void:
+	var rank_sum := 0.0
+	var wins := 0
+	var series := 0
+	var top4 := 0
+	var champs := 0
+	var rating0 := 0.0
+	var rating1 := 0.0
+	var prof_gain := 0.0
+	for k in n:
+		var season: Dictionary = Season.create(seed0 + k)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed0 + k
+		var team: Dictionary = World.team(season["world"], str(season["human"]))
+		var r0 := 0.0
+		for pid in team["players"]:
+			r0 += World.rating(season["world"]["players"][pid])
+		rating0 += r0 / 3.0
+		var guard := 0
+		while str(season["phase"]) != "done" and guard < 60:
+			guard += 1
+			_plan_for(season, strategy, rng)
+			Season.quick_rest(season, false)
+			Season.advance(season)
+		var r1 := 0.0
+		for pid in team["players"]:
+			r1 += World.rating(season["world"]["players"][pid])
+		rating1 += r1 / 3.0
+		var st: Array = Season.standings(season)
+		for i in st.size():
+			if str(st[i]["id"]) == str(season["human"]):
+				rank_sum += i + 1
+				top4 += 1 if i < 4 else 0
+				wins += int(st[i]["w"])
+				series += int(st[i]["w"]) + int(st[i]["l"])
+		champs += 1 if str(season["champion"]) == str(season["human"]) else 0
+	print("train=%s  seasons %d  avg rank %.2f / 8  top4 %d%%  regular-season series win %d%%  champion %d%%  ability %.2f -> %.2f" % [
+		strategy, n, rank_sum / n, int(100.0 * top4 / n), int(100.0 * wins / maxf(1, series)), int(100.0 * champs / n), rating0 / n, rating1 / n])

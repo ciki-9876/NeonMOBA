@@ -9,6 +9,7 @@ extends RefCounted
 const World = preload("res://game/league/world.gd")
 const Series = preload("res://game/league/series.gd")
 const Stories = preload("res://game/league/stories.gd")
+const Training = preload("res://game/league/training.gd")
 
 static func create(seed: int, n_teams := 8, human := true) -> Dictionary:
 	var world: Dictionary = World.generate(seed, n_teams, human)
@@ -21,7 +22,9 @@ static func create(seed: int, n_teams := 8, human := true) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed * 7919 + 13
 	season["rng_state"] = rng.state
+	Training.ensure(season)
 	Stories.preseason(season)
+	Training.start_stage(season)
 	return season
 
 ## circle method: n-1 weeks, n/2 series per week, every pair meets once
@@ -66,6 +69,9 @@ static func human_series(season: Dictionary) -> Dictionary:
 
 ## resolve every unfinished series of the current stage instantly (skip_human: leave the human's series alone)
 static func quick_rest(season: Dictionary, skip_human := true) -> void:
+	Training.start_stage(season)
+	if not skip_human:
+		Training.commit_human(season)   # the human team trains (auto plan unless the UI set one) before it plays
 	var rng := rng_of(season)
 	for s in current_series(season):
 		if Series.done(s):
@@ -117,6 +123,7 @@ static func stage_done(season: Dictionary) -> bool:
 static func advance(season: Dictionary) -> void:
 	if not stage_done(season):
 		return
+	Training.commit_human(season)   # a human team without a series this stage (eliminated) still recovers
 	Stories.on_stage_end(season)
 	match str(season["phase"]):
 		"regular":
@@ -135,6 +142,7 @@ static func advance(season: Dictionary) -> void:
 				season["phase"] = "done"
 				season["champion"] = str(stage[0]["winner"])
 				Stories.on_season_end(season)
+	Training.start_stage(season)
 
 ## regular-season table: series wins, then map difference, then head-to-head
 static func standings(season: Dictionary) -> Array:

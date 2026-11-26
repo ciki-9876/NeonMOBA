@@ -12,6 +12,7 @@ const Draft = preload("res://game/league/draft.gd")
 const QuickSim = preload("res://game/league/quick_sim.gd")
 const World = preload("res://game/league/world.gd")
 const HeroesDB = preload("res://heroes_db.gd")
+const Training = preload("res://game/league/training.gd")
 
 const ROLE_ORDER := ["carry", "tank", "support"]
 
@@ -60,7 +61,10 @@ static func lineups(s: Dictionary, world: Dictionary) -> Array:
 	for side in 2:
 		var t := tid(s, side)
 		var lu: Array = Draft.lineup(s["draft"], side, Draft.by_role(world, t), ROLE_ORDER)
-		out.append({"team": t, "heroes": lu[0], "profiles": lu[1], "runes": World.team(world, t).get("runes", {})})
+		var profs := []
+		for pr in lu[1]:
+			profs.append(Training.in_form(pr))   # tired players play below their sheet
+		out.append({"team": t, "heroes": lu[0], "profiles": profs, "runes": World.team(world, t).get("runes", {})})
 	return out
 
 ## store a finished map (quick or full) and update the series score
