@@ -15,10 +15,11 @@ const World = preload("res://game/league/world.gd")
 const ORDER := [["ban", 0], ["ban", 1], ["ban", 0], ["ban", 1],
 	["pick", 0], ["pick", 1], ["pick", 1], ["pick", 0], ["pick", 0], ["pick", 1]]
 
-## win-rate prior of each hero in AI-vs-AI play (logit units, + = stronger). Updated from the 60-map balance run
-## (docs/design/英雄设计体系_3C.md), halved for noise: (win rate − 50%) / 100. The AI drafts with it and the quick
+## win-rate prior of each hero in AI-vs-AI play (logit units, + = stronger). Legacy heroes use the documented 60-map
+## balance run; new heroes use the small provisional batch in docs/design/英雄设计体系_3C.md. Formula: (win rate − 50%) / 100.
+## The AI drafts with it and the quick
 ## resolver uses it (Draft.value adds 2 × prior ability points).
-const HERO_PRIOR := {"ember": 0.12, "lumen": 0.09, "drift": 0.08, "aegis": 0.08, "seer": 0.05, "echo": 0.02, "anchor": 0.02, "frost": 0.00, "falcon": -0.05, "rail": -0.09, "blade": -0.10, "tide": -0.15}
+const HERO_PRIOR := {"ember": 0.12, "lumen": 0.09, "drift": 0.08, "aegis": 0.08, "seer": 0.05, "echo": 0.02, "anchor": 0.02, "frost": 0.00, "breakwater": 0.20, "cinderline": -0.10, "harborlight": -0.10, "falcon": -0.05, "rail": -0.09, "blade": -0.10, "tide": -0.15}
 
 # ------------------------------------------------------------ map veto
 ## state: {"pool": [...], "maps": [m1, m2, m3], "bans": [...], "step": 0..3}; steps: A pick, B pick, A ban, done

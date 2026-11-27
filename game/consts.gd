@@ -50,6 +50,13 @@ const HERO_ROWS4 := [
 	["echo_q", 32, 32, 1], ["echo_w", 32, 32, 1], ["echo_e", 32, 32, 1], ["echo_r", 32, 32, 1],
 ]
 
+const HERO_ROWS5 := [
+	["breakwater", 18, 18, 2], ["cinderline", 18, 18, 2], ["harborlight", 18, 18, 2],
+	["breakwater_w", 32, 32, 1], ["breakwater_q", 32, 32, 1], ["breakwater_e", 32, 32, 1], ["breakwater_r", 32, 32, 1],
+	["cinderline_w", 32, 32, 1], ["cinderline_q", 32, 32, 1], ["cinderline_e", 32, 32, 1], ["cinderline_r", 32, 32, 1],
+	["harborlight_w", 32, 32, 1], ["harborlight_q", 32, 32, 1], ["harborlight_e", 32, 32, 1], ["harborlight_r", 32, 32, 1],
+]
+
 const HERO_ROWS := [
 	["blade", 18, 18, 2], ["b_icon_q", 32, 32, 1], ["b_icon_w", 32, 32, 1], ["b_icon_e", 32, 32, 1], ["b_icon_r", 32, 32, 1],
 	["mark", 9, 9, 1],

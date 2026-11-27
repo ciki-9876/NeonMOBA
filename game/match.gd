@@ -92,6 +92,7 @@ func _load_assets() -> void:
 	_slice("res://art/heroes2.png", C.HERO_ROWS2)
 	_slice("res://art/heroes3.png", C.HERO_ROWS3)
 	_slice("res://art/heroes4.png", C.HERO_ROWS4)
+	_slice("res://art/heroes5.png", C.HERO_ROWS5)
 	var icons: Texture2D = load("res://art/items.png")
 	var order: Array = ItemsDB.ORDER
 	for i in order.size():
