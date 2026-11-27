@@ -64,7 +64,8 @@ func _on_shop_input(ev: InputEvent, id: String) -> void:
 	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
 		_buy(id)
 
-const STAT_NAMES := {"atk": "攻击力", "as": "% 攻击速度", "def": "物理防御", "res": "法术防御", "ms": "移动速度",
+const Tune = preload("res://game/tuning.gd")
+const STAT_NAMES := {"atk": "攻击力（全局倍率后）", "as": "% 基础攻速（全局倍率后）", "def": "物理防御", "res": "法术防御", "ms": "移动速度",
 	"hp": "生命值", "mana": "法力值", "hpr": "生命回复", "mpr": "法力回复", "ls": "% 吸血", "pow": "% 技能强度",
 	"cdr": "% 冷却缩减", "range": "攻击距离", "pspd": "弹道速度", "vision": "视野"}
 const CAT_NAMES := {"basic": "基础", "advanced": "进阶", "ultimate": "终极", "upgrade": "英雄强化"}
@@ -79,9 +80,12 @@ func _item_text(id: String, with_price: bool) -> String:
 	var parts := []
 	for k in stv:
 		var nm: String = STAT_NAMES.get(k, k)
+		var amount := float(stv[k])
+		if k == "atk": amount *= Tune.ATTACK_DAMAGE_MULT
+		elif k == "as": amount *= Tune.ATTACK_SPEED_MULT
 		if k == "range" and gm.player != null and bool(gm.player.def["melee"]):
 			nm += "（近战减半）"
-		parts.append(("+%s%s" if nm.begins_with("%") else "+%s %s") % [_num(float(stv[k])), nm])
+		parts.append(("+%s%s" if nm.begins_with("%") else "+%s %s") % [_num(amount), nm])
 	if not parts.is_empty():
 		out += "[color=#c8f0ff]" + "   ".join(PackedStringArray(parts)) + "[/color]\n"
 	var spc: Dictionary = it["special"]
@@ -323,7 +327,7 @@ func _update_ui_v3(delta: float) -> void:
 	var g := func(k: String) -> float: return float(p.ST.get(k, 0.0))
 	var dfp := func(x: float) -> int: return int(round((1.0 - gm.def_mult(x)) * 100.0))
 	hd.attr_rt.text = "攻击力 %d [color=#6aff8a]+%d[/color]   攻速 %d%%（%.2f 秒）\n物防 %d（减伤 %d%%）  法防 %d（减伤 %d%%）\n技能强度 %d%%   冷却缩减 %d%%\n移速 %d   吸血 %d%%\n[color=#8a92b8]按 C 查看详细属性[/color]" % [
-		int(g.call("dmg_base")), int(g.call("dmg_bonus")), int(g.call("as")), p.atk_interval(),
+		int(p.atk_base_display()), int(p.atk_bonus_display()), int(round(p.atk_rate() * 100.0)), p.atk_interval(),
 		int(p.armor_val()), dfp.call(p.armor_val()), int(p.mr_val()), dfp.call(p.mr_val()),
 		int(round(g.call("pow") * 100.0)), int(round(g.call("cdr") * 100.0)),
 		int(p.move_speed()), int(round(g.call("ls") * 100.0))]
@@ -334,8 +338,8 @@ func _update_ui_v3(delta: float) -> void:
 		if p.has_scepter(): upg.append("终极协议")
 		hd.stats_rt.text = "[b][color=#ffd23f]%s[/color][/b]   [color=#8a92b8]英雄面板固定，属性全部来自装备与符文；升级只获得技能点[/color]\n\n攻击力  %d + [color=#6aff8a]%d[/color]%s\n攻击速度  %d%%（攻击间隔 %.2f 秒，英雄基础 %.2f 秒）\n攻击距离  %d%s    弹道速度  %d    视野  %d\n物理防御  %d（物理减伤 %d%%）\n法术防御  %d（法术减伤 %d%%）\n移动速度  %d\n生命  %d    回复 %.1f / 秒\n法力  %d    回复 %.1f / 秒\n技能强度  %d%%    冷却缩减  %d%%    吸血  %d%%\n暴击  %s\n英雄强化  %s" % [
 			p.def["name"],
-			int(g.call("dmg_base")), int(g.call("dmg_bonus")), ("  [color=#ffd23f](双倍伤害神符)[/color]" if p.dd_t > 0.0 else ""),
-			int(g.call("as")), p.atk_interval(), float(p.def["stats"]["interval"]), int(p.atk_range()), ("（近战）" if bool(p.def["melee"]) else ""),
+			int(p.atk_base_display()), int(p.atk_bonus_display()), ("  [color=#ffd23f](双倍伤害神符)[/color]" if p.dd_t > 0.0 else ""),
+			int(round(p.atk_rate() * 100.0)), p.atk_interval(), float(p.def["stats"]["interval"]), int(p.atk_range()), ("（近战）" if bool(p.def["melee"]) else ""),
 			int(p.proj_speed()), int(g.call("vision")),
 			int(p.armor_val()), dfp.call(p.armor_val()), int(p.mr_val()), dfp.call(p.mr_val()), int(p.move_speed()),
 			int(p.max_hp), p.hp_regen(), int(p.mana_max), p.mp_regen(),

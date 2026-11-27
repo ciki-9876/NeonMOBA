@@ -201,10 +201,16 @@ func mp_regen() -> float:
 
 func atk_dmg() -> float:
 	var base: float = float(ST.get("dmg_base", 50.0))
-	return base * (2.0 if dd_t > 0.0 else 1.0) + float(ST.get("dmg_bonus", 0.0))
+	return (base * (2.0 if dd_t > 0.0 else 1.0) + float(ST.get("dmg_bonus", 0.0))) * Tune.ATTACK_DAMAGE_MULT
+
+func atk_base_display() -> float:
+	return float(ST.get("dmg_base", 50.0)) * Tune.ATTACK_DAMAGE_MULT * (2.0 if dd_t > 0.0 else 1.0)
+
+func atk_bonus_display() -> float:
+	return float(ST.get("dmg_bonus", 0.0)) * Tune.ATTACK_DAMAGE_MULT
 
 func atk_rate() -> float:
-	return clampf(float(ST.get("as", 100.0)) + buff_v("as"), 20.0, 700.0) / 100.0
+	return clampf(float(ST.get("as", 100.0)) + buff_v("as"), 20.0, 700.0) / 100.0 * Tune.ATTACK_SPEED_MULT
 
 func as_bonus() -> float:
 	return atk_rate() - 1.0

@@ -509,6 +509,14 @@ func _pct(p) -> String:
 		return "/".join(PackedStringArray(parts)) + "%"
 	return _n(float(p) * 100.0) + "%"
 
+func _as_vals(p) -> String:
+	if p is Array:
+		var parts := []
+		for x in p:
+			parts.append(_n(float(x) * Tune.ATTACK_SPEED_MULT))
+		return "/".join(PackedStringArray(parts)) + "%"
+	return _n(float(p) * Tune.ATTACK_SPEED_MULT) + "%"
+
 func _n(v: float) -> String:
 	return str(int(round(v))) if absf(v - roundf(v)) < 0.05 else ("%.1f" % v)
 
@@ -546,7 +554,8 @@ func _desc(effects: Array) -> String:
 			"buff":
 				var bid: String = str(e["id"])
 				var bv = e.get("v", 0)
-				parts.append("%s%s +%s，持续 %s 秒" % [w, BUFF_NAMES.get(bid, bid), _pct(bv) if bid in ["haste", "dr"] else _vals(bv), _vals(e["dur"])])
+				var buff_value := _pct(bv) if bid in ["haste", "dr"] else (_as_vals(bv) if bid == "as" else _vals(bv))
+				parts.append("%s%s +%s，持续 %s 秒" % [w, BUFF_NAMES.get(bid, bid), buff_value, _vals(e["dur"])])
 			"dash": parts.append("冲向目标%s" % ("，然后" + _desc(e.get("then", [])) if not e.get("then", []).is_empty() else ""))
 			"pull": parts.append("把%s拉向%s" % [w, "自己" if str(e.get("to", "caster")) == "caster" else "中心"])
 			"shot": parts.append("射出长度 %s 的弹道，命中%s时：%s" % [_vals(e.get("len", 900)), "每个对手" if bool(e.get("pierce", false)) else "第一个对手", _desc(e.get("then", []))])
@@ -574,11 +583,12 @@ func tip(s: String) -> String:
 		if p.has("def"): bits.append("物理防御 +%s" % _vals(p["def"]))
 		if p.has("res"): bits.append("法术防御 +%s" % _vals(p["res"]))
 		if p.has("regen"): bits.append("生命回复 +%s" % _vals(p["regen"]))
-		if p.has("as"): bits.append("攻速 +%s%%" % _vals(p["as"]))
+		if p.has("as"): bits.append("攻速 +%s" % _as_vals(p["as"]))
 		if p.has("ms"): bits.append("移速 +%s" % _vals(p["ms"]))
 		if p.has("aura"):
 			var a: Dictionary = p["aura"]
-			bits.append("光环：%s 范围内的友方%s +%s" % [_n(float(a.get("r", 700))), BUFF_NAMES.get(str(a["id"]), str(a["id"])), _vals(a["v"])])
+			var aura_value := _as_vals(a["v"]) if str(a["id"]) == "as" else _vals(a["v"])
+			bits.append("光环：%s 范围内的友方%s +%s" % [_n(float(a.get("r", 700))), BUFF_NAMES.get(str(a["id"]), str(a["id"])), aura_value])
 		body += "，".join(PackedStringArray(bits)) + "。"
 	var tail := ""
 	if st.has("mana"):
