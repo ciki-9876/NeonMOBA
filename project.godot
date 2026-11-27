@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="NEON DRIFT"
-config/description="霓虹漂移 — neon arena survivor"
+config/name="NEON DRIFT · 64-BIT PIXEL DEMO"
+config/description="独立像素画风演示副本 — 64-bit inspired pixel art"
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
@@ -25,4 +25,3 @@ window/stretch/aspect="expand"
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
-viewport/hdr_2d=true

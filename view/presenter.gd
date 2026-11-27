@@ -11,6 +11,7 @@ const HeroesDB = preload("res://heroes_db.gd")
 const ItemsDB = preload("res://items_db.gd")
 const Grid = preload("res://view/grid.gd")
 const Ring = preload("res://view/ring.gd")
+const PIXEL_POST_SHADER: Shader = preload("res://art/pixel_post.gdshader")
 
 const MatchT = preload("res://game/match.gd")
 var gm: MatchT
@@ -30,7 +31,7 @@ var SND := {}
 ## cosmetic randomness only (never the match RNG, so watching a match cannot change its result)
 var rng := RandomNumberGenerator.new()
 var fade_grad: Gradient
-var ui_font: SystemFont
+var ui_font: Font
 var label_set: LabelSettings
 var label_skill: LabelSettings
 var label_big: LabelSettings
@@ -62,25 +63,35 @@ func _ls(size: int, col: Color) -> LabelSettings:
 	ls.font = ui_font
 	ls.font_size = size
 	ls.font_color = col
-	ls.outline_size = maxi(4, size / 5)
-	ls.outline_color = Color(0.02, 0.0, 0.08, 0.95)
+	ls.outline_size = 1 if size <= 24 else 2
+	ls.outline_color = Color("081018")
 	return ls
 
 func _build_env() -> void:
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_CANVAS
-	env.glow_enabled = true
-	env.glow_intensity = 0.55
-	env.glow_strength = 1.0
-	env.glow_bloom = 0.05
-	env.glow_hdr_threshold = 1.0
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
-	for i in range(1, 6):
-		env.set_glow_level(i, 1.0)
+	# The pixel pass should keep edges and colors crisp instead of blurring them.
+	env.glow_enabled = false
 	we.environment = env
 	add_child(we)
-	RenderingServer.set_default_clear_color(Color(0.02, 0.015, 0.05))
+	RenderingServer.set_default_clear_color(Color("0a111a"))
+
+func build_pixel_postprocess() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "PixelPostProcess"
+	# HUD lives on CanvasLayer 5; filter the world underneath it and keep text crisp.
+	layer.layer = 4
+	add_child(layer)
+	var pixel_rect := ColorRect.new()
+	pixel_rect.name = "PixelScale"
+	pixel_rect.color = Color.WHITE
+	pixel_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pixel_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var material := ShaderMaterial.new()
+	material.shader = PIXEL_POST_SHADER
+	pixel_rect.material = material
+	layer.add_child(pixel_rect)
 
 func _build_audio() -> void:
 	for i in 22:
@@ -552,46 +563,63 @@ func frame(delta: float) -> void:
 # ============================================================ round mode drawing
 func _draw_rounds_floor() -> void:
 	var o := floor_layer
-	o.draw_circle(Vector2.ZERO, C.ARENA_R, Color(0.05, 0.03, 0.12, 0.55))
-	o.draw_arc(Vector2.ZERO, C.ARENA_R, 0, TAU, 160, Color(0.6, 1.2, 2.4, 0.9), 6.0)
-	o.draw_arc(Vector2.ZERO, C.ARENA_R + 14.0, 0, TAU, 160, Color(1.6, 0.4, 2.0, 0.5), 2.0)
+	# Broad, quiet floor planes establish lanes and the central plaza without
+	# repeating small decals across the whole arena.
+	o.draw_circle(Vector2.ZERO, C.ARENA_R, Color("1b2730"))
+	o.draw_rect(Rect2(-1230.0, -190.0, 2460.0, 380.0), Color("24323a"))
+	o.draw_rect(Rect2(-960.0, -780.0, 1920.0, 220.0), Color("202d35"))
+	o.draw_rect(Rect2(-960.0, 560.0, 1920.0, 220.0), Color("202d35"))
+	o.draw_circle(Vector2.ZERO, 360.0, Color("293840"))
+	o.draw_arc(Vector2.ZERO, 370.0, 0, TAU, 48, Color("34464e"), 8.0)
+	o.draw_arc(Vector2.ZERO, C.ARENA_R, 0, TAU, 48, Color("60767c"), 6.0)
+	o.draw_arc(Vector2.ZERO, C.ARENA_R + 14.0, 0, TAU, 48, Color("34474f"), 3.0)
 	if gm.terrain != null:
-		# shadows of the obstacles on the floor (the solid blocks are drawn in the overlay)
+		# Small offset shadows separate solid covers from the flat ground.
 		for pl in gm.terrain.circles:
-			o.draw_circle(pl[0] + Vector2(10, 14), float(pl[1]), Color(0, 0, 0, 0.45))
+			o.draw_circle(pl[0] + Vector2(8, 10), float(pl[1]), Color(0, 0, 0, 0.24))
 		for rc in gm.terrain.rects:
-			o.draw_rect(Rect2(rc.position + Vector2(10, 14), rc.size), Color(0, 0, 0, 0.45))
+			o.draw_rect(Rect2(rc.position + Vector2(8, 10), rc.size), Color(0, 0, 0, 0.24))
 	for tm in 2:
 		var hp := gm.home_pos(tm)
-		var c := Color(0.3, 1.6, 1.2) if tm == 0 else Color(2.0, 0.4, 0.4)
-		o.draw_circle(hp, 170.0, Color(c.r * 0.2, c.g * 0.2, c.b * 0.2, 0.35))
-		o.draw_arc(hp, 40.0, 0, TAU, 32, c, 4.0)
+		var c := Color("58c7b0") if tm == 0 else Color("e47f79")
+		o.draw_rect(Rect2(hp - Vector2(200, 280), Vector2(400, 560)), Color(c.r, c.g, c.b, 0.13))
+		o.draw_rect(Rect2(hp - Vector2(52, 52), Vector2(104, 104)), c.darkened(0.2), false, 6.0)
 
 ## the core: locked (grey) / open (pulsing) with each team's capture arc; spawn walls during the buy phase
 func _draw_terrain(o: Node2D, tick: float) -> void:
 	var t = gm.terrain
-	# brush: soft green patches with swaying blade strokes (drawn over units, so hiding reads clearly)
+	# Bushes are two calm, connected color masses; individual leaf pixels made the
+	# battlefield look noisy at the normal camera scale.
 	for i in t.brush.size():
 		var bc: Vector2 = t.brush[i][0]
 		var br: float = t.brush[i][1]
-		o.draw_circle(bc, br, Color(0.12, 0.55, 0.25, 0.30))
-		o.draw_arc(bc, br, 0, TAU, 48, Color(0.3, 1.6, 0.6, 0.55), 2.0)
-		var n := int(br / 9.0)
-		for k in n:
-			var a := TAU * k / float(n) + float(i) * 0.7
-			var rr: float = br * (0.25 + 0.7 * fmod(k * 0.618, 1.0))
-			var base := bc + Vector2.from_angle(a) * rr
-			var sway := sin(tick * 1.8 + k * 1.3) * 3.0
-			o.draw_line(base, base + Vector2(sway, -14.0), Color(0.35, 1.5, 0.6, 0.45), 2.0)
-	# pillars and walls: solid blocks with a neon rim
+		o.draw_colored_polygon(_pixel_octagon(bc + Vector2(8, 10), br), Color("12231e"))
+		o.draw_colored_polygon(_pixel_octagon(bc, br), Color("28553f"))
+		o.draw_colored_polygon(_pixel_octagon(bc - Vector2(8, 8), br * 0.72), Color("3d7958"))
+	# Covers use a simple silhouette and a single broad face color.
 	for pl in t.circles:
-		o.draw_circle(pl[0], float(pl[1]), Color(0.10, 0.09, 0.20, 1.0))
-		o.draw_circle(pl[0], float(pl[1]) * 0.6, Color(0.16, 0.14, 0.30, 1.0))
-		o.draw_arc(pl[0], float(pl[1]), 0, TAU, 48, Color(0.8, 1.0, 2.4, 0.95), 3.0)
+		var center: Vector2 = pl[0]
+		var radius: float = float(pl[1])
+		o.draw_colored_polygon(_pixel_octagon(center + Vector2(8, 10), radius), Color("111b22"))
+		o.draw_colored_polygon(_pixel_octagon(center, radius), Color("40525b"))
+		o.draw_colored_polygon(_pixel_octagon(center - Vector2(4, 4), radius * 0.76), Color("65777a"))
 	for rc in t.rects:
-		o.draw_rect(rc, Color(0.10, 0.09, 0.20, 1.0))
-		o.draw_rect((rc as Rect2).grow(-10.0), Color(0.16, 0.14, 0.30, 1.0))
-		o.draw_rect(rc, Color(0.8, 1.0, 2.4, 0.95), false, 3.0)
+		o.draw_rect(Rect2(rc.position + Vector2(8, 10), rc.size), Color("111b22"))
+		o.draw_rect(rc, Color("40525b"))
+		if rc.size.x >= rc.size.y:
+			var face_h := minf(18.0, rc.size.y * 0.35)
+			o.draw_rect(Rect2(rc.position, Vector2(rc.size.x, face_h)), Color("65777a"))
+		else:
+			var face_w := minf(18.0, rc.size.x * 0.35)
+			o.draw_rect(Rect2(rc.position, Vector2(face_w, rc.size.y)), Color("65777a"))
+
+func _pixel_octagon(center: Vector2, radius: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in 8:
+		var angle := TAU * float(i) / 8.0 - PI / 8.0
+		var point := center + Vector2(cos(angle), sin(angle)) * radius
+		points.append((point / 4.0).round() * 4.0)
+	return points
 
 func _draw_rounds_overlay(o: Node2D, tick: float) -> void:
 	var r = gm.rounds
@@ -601,23 +629,21 @@ func _draw_rounds_overlay(o: Node2D, tick: float) -> void:
 	var rad: float = r.CORE_R
 	if r.core_open():
 		var pulse := 0.5 + 0.5 * sin(tick * 4.0)
-		o.draw_circle(p, rad, Color(1.4, 1.4, 1.8, 0.06 + 0.04 * pulse))
-		o.draw_arc(p, rad, 0, TAU, 96, Color(2.2, 2.2, 2.6, 0.7 + 0.3 * pulse), 3.0)
+		o.draw_circle(p, rad, Color(0.8, 0.77, 0.58, 0.06 + 0.04 * pulse))
+		o.draw_arc(p, rad, 0, TAU, 48, Color("d4c58e"), 5.0)
 	else:
 		o.draw_circle(p, rad, Color(0.3, 0.3, 0.45, 0.08))
-		for i in 24:
-			var a0 := TAU * i / 24.0
-			o.draw_arc(p, rad, a0, a0 + TAU / 48.0, 4, Color(0.6, 0.6, 0.9, 0.6), 2.0)
+		o.draw_arc(p, rad, 0, TAU, 48, Color("596872"), 4.0)
 		if r.phase == "live":
 			var k: float = clampf(r.phase_t / r.CORE_UNLOCK, 0.0, 1.0)
-			o.draw_arc(p, rad * 0.35, -PI / 2, -PI / 2 + TAU * k, 48, Color(1.6, 1.6, 2.2, 0.8), 4.0)
+			o.draw_arc(p, rad * 0.35, -PI / 2, -PI / 2 + TAU * k, 32, Color("c5b982"), 5.0)
 	for tm in 2:
 		var cap: float = r.capture[tm]
 		if cap > 0.0:
-			var col := Color(0.3, 1.8, 2.2) if tm == 0 else Color(2.4, 0.4, 0.4)
-			o.draw_arc(p, rad + 10.0 + tm * 9.0, -PI / 2, -PI / 2 + TAU * cap, 96, col, 6.0)
+			var col := Color("5bbba6") if tm == 0 else Color("ca716a")
+			o.draw_arc(p, rad + 8.0 + tm * 7.0, -PI / 2, -PI / 2 + TAU * cap, 48, col, 7.0)
 	if r.phase == "buy":
 		for tm in 2:
-			var c := Color(0.3, 1.6, 1.2, 0.8) if tm == 0 else Color(2.0, 0.4, 0.4, 0.8)
-			o.draw_arc(gm.home_pos(tm), r.SPAWN_R, 0, TAU, 64, c, 3.0)
+			var c := Color("5bbba6") if tm == 0 else Color("ca716a")
+			o.draw_arc(gm.home_pos(tm), r.SPAWN_R, 0, TAU, 48, c, 4.0)
 

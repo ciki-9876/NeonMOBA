@@ -144,7 +144,7 @@ func _small_btn(text: String, w: float) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(w, 28)
 	b.add_theme_font_override("font", vw.ui_font)
-	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_font_size_override("font_size", 16)
 	b.add_theme_stylebox_override("normal", hd._panel_style(Color(0.1, 0.08, 0.18, 0.95), Color(0.3, 0.8, 1.0, 0.6)))
 	b.add_theme_stylebox_override("hover", hd._panel_style(Color(0.18, 0.12, 0.3, 0.95), Color(1.0, 0.85, 0.3)))
 	b.add_theme_stylebox_override("pressed", hd._panel_style(Color(0.25, 0.18, 0.05, 0.95), Color(1.0, 0.85, 0.3)))
@@ -254,7 +254,7 @@ func _rebuild_shop_grid() -> void:
 		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 		b.text = str(int(it["cost"]))
 		b.add_theme_font_override("font", vw.ui_font)
-		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_font_size_override("font_size", 15)
 		b.add_theme_color_override("font_color", Color(1.0, 0.82, 0.25))
 		b.add_theme_stylebox_override("normal", hd._panel_style(Color(0.08, 0.07, 0.14), Color(0.3, 0.3, 0.45)))
 		b.add_theme_stylebox_override("hover", hd._panel_style(Color(0.15, 0.12, 0.25), Color(1.0, 0.85, 0.3)))

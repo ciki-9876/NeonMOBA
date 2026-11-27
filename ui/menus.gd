@@ -46,11 +46,11 @@ func _menu_btn(text: String, w: float, h: float, size: int) -> Button:
 	b.custom_minimum_size = Vector2(w, h)
 	b.add_theme_font_override("font", vw.ui_font)
 	b.add_theme_font_size_override("font_size", size)
-	b.add_theme_color_override("font_color", Color(0.7, 1.0, 1.0))
-	b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.6))
-	b.add_theme_stylebox_override("normal", hd._panel_style(Color(0.05, 0.04, 0.12, 0.92), Color(0.3, 0.8, 1.0, 0.7)))
-	b.add_theme_stylebox_override("hover", hd._panel_style(Color(0.12, 0.08, 0.22, 0.95), Color(1.0, 0.85, 0.3)))
-	b.add_theme_stylebox_override("pressed", hd._panel_style(Color(0.2, 0.14, 0.05, 0.95), Color(1.0, 0.85, 0.3)))
+	b.add_theme_color_override("font_color", Color("c7d6d0"))
+	b.add_theme_color_override("font_hover_color", Color("f0d48a"))
+	b.add_theme_stylebox_override("normal", hd._panel_style(Color("111b24", 0.98), Color("5e8187")))
+	b.add_theme_stylebox_override("hover", hd._panel_style(Color("24353b"), Color("94b9a5")))
+	b.add_theme_stylebox_override("pressed", hd._panel_style(Color("314439"), Color("e0b86e")))
 	return b
 
 func _build_menu() -> void:
@@ -91,7 +91,7 @@ func _build_menu() -> void:
 		col.add_theme_constant_override("separation", 10)
 		col.custom_minimum_size = Vector2(370, 0)
 		cols.add_child(col)
-		var head := hd._label(24, Color(0.4, 1.8, 1.0) if tm == 0 else Color(2.0, 0.5, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
+		var head := hd._label(24, Color("73cdb7") if tm == 0 else Color("df8880"), HORIZONTAL_ALIGNMENT_CENTER)
 		head.text = "霓虹队（我方）" if tm == 0 else "赤潮队（对方 AI）"
 		col.add_child(head)
 		for i in C.TEAM_SIZE:
@@ -105,7 +105,7 @@ func _build_menu() -> void:
 			ob.focus_mode = Control.FOCUS_NONE
 			ob.custom_minimum_size = Vector2(250, 40)
 			ob.add_theme_font_override("font", vw.ui_font)
-			ob.add_theme_font_size_override("font_size", 17)
+			ob.add_theme_font_size_override("font_size", 20)
 			for id in HeroesDB.ORDER:
 				ob.add_item("%s  ·  %s" % [HeroesDB.HEROES[id]["name"], HeroesDB.ROLE_NAMES[HeroesDB.HEROES[id]["role"]]])
 			ob.add_item("随机（按职业补位）")
@@ -123,7 +123,7 @@ func _build_menu() -> void:
 	diff_opt.focus_mode = Control.FOCUS_NONE
 	diff_opt.custom_minimum_size = Vector2(120, 40)
 	diff_opt.add_theme_font_override("font", vw.ui_font)
-	diff_opt.add_theme_font_size_override("font_size", 17)
+	diff_opt.add_theme_font_size_override("font_size", 20)
 	for nm in ["简单", "普通", "困难"]:
 		diff_opt.add_item(nm)
 	diff_opt.select(1)
@@ -135,7 +135,7 @@ func _build_menu() -> void:
 	map_opt.focus_mode = Control.FOCUS_NONE
 	map_opt.custom_minimum_size = Vector2(170, 40)
 	map_opt.add_theme_font_override("font", vw.ui_font)
-	map_opt.add_theme_font_size_override("font_size", 17)
+	map_opt.add_theme_font_size_override("font_size", 20)
 	for mid in Maps.ORDER:
 		map_opt.add_item(str(Maps.MAPS[mid]["name"]))
 	map_opt.select(0)
@@ -171,7 +171,7 @@ func _show_menu() -> void:
 	shp._close_shop()
 	hd.center_lbl.text = "NEON DRIFT"
 	hd.center_lbl.label_settings.font_size = 104
-	hd.center_lbl.label_settings.font_color = Color(0.4, 1.0, 1.0)
+	hd.center_lbl.label_settings.font_color = Color("d9c77f")
 	hd.center_lbl.modulate.a = 1.0
 	hd.sub_lbl.modulate.a = 1.0
 	hd.sub_lbl.text = "霓 虹 漂 移"

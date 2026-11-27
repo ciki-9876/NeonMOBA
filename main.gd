@@ -19,6 +19,8 @@ const ShopUI = preload("res://ui/shop_ui.gd")
 const Menus = preload("res://ui/menus.gd")
 const PlayerInput = preload("res://input/player_input.gd")
 const LeagueUI = preload("res://ui/league_ui.gd")
+const PIXEL_FONT_CJK: FontFile = preload("res://art/fonts/fusion-pixel-12px-proportional/fusion-pixel-12px-proportional-zh_hans.ttf")
+const PIXEL_FONT_LATIN: FontFile = preload("res://art/fonts/fusion-pixel-12px-proportional/fusion-pixel-12px-proportional-latin.ttf")
 
 ## at most this many simulation steps per rendered frame (prevents a spiral after a hitch)
 const MAX_STEPS := 6
@@ -51,10 +53,10 @@ func _ready() -> void:
 				m.set(f, get(f))
 		if "app" in m:
 			m.app = self
-	vw.ui_font = SystemFont.new()
-	vw.ui_font.font_names = PackedStringArray(["PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "sans-serif"])
-	vw.ui_font.font_weight = 600
+	vw.ui_font = PIXEL_FONT_CJK.duplicate() as Font
+	vw.ui_font.fallbacks = [PIXEL_FONT_LATIN]
 	ThemeDB.fallback_font = vw.ui_font
+	ThemeDB.fallback_font_size = 18
 	world = Node2D.new()
 	add_child(world)
 	add_child(vw)
@@ -85,6 +87,7 @@ func _ready() -> void:
 	vw._build_audio()
 	hd._load_best()
 	mnu._show_menu()
+	vw.build_pixel_postprocess()
 
 func _process(delta: float) -> void:
 	hd._update_fx_ui(delta)

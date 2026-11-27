@@ -83,7 +83,7 @@ func _panel_style(bg: Color, border: Color) -> StyleBoxFlat:
 	sb.bg_color = bg
 	sb.border_color = border
 	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(6)
+	sb.set_corner_radius_all(0)
 	sb.set_content_margin_all(8)
 	return sb
 
