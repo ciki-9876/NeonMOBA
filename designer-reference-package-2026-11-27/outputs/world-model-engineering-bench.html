@@ -207,7 +207,7 @@
         const oldLineup=reserve.lineup;
         reserve.lineup="reserve";reserve.benchSince=["earn_starting_role","seek_transfer"].includes(reserve.careerGoal)&&reserve.ambition>=55?step:null;
         addDiff(state,step,reserve.id,"lineup",oldLineup,reserve.lineup,"R-05");
-        reserve.benchEventId=addTrace(state,step,"R-05","首发位置调整",`${entityName(reserve.id)} 暂列替补；${teamName(groupId)}首发保持在 ${STARTER_CAPACITY} 人以内。`,[`${entityName(incomingId||reserve.id)} 转入 ${teamName(groupId)} → 首发人数达到上限`,`${entityName(reserve.id)} 的目标是${goalName(reserve.careerGoal)} → 暂列替补后会考虑其他上场机会`],{causeEventIds:causeEventId?[causeEventId]:[],actors:[incomingId,reserve.id].filter(Boolean),intent:goalName(reserve.careerGoal),preconditions:["战队首发人数超过上限",`${entityName(reserve.id)} 当前首发能力最弱`],effects:[`${entityName(reserve.id)} 阵容位置改为替补`,`首发人数恢复到 ${STARTER_CAPACITY} 人以内`]});
+        reserve.benchEventId=addTrace(state,step,"R-05","首发位置调整",`${entityName(reserve.id)} 暂列替补；${teamName(groupId)}首发保持在 ${STARTER_CAPACITY} 人以内。`,[`${entityName(incomingId||reserve.id)} 转入 ${teamName(groupId)} → 首发人数达到上限`,`${entityName(reserve.id)} 的目标是${goalName(reserve.careerGoal)} → 暂列替补后会考虑其他上场机会`],{causeEventIds:causeEventId?[causeEventId]:[],actors:[...new Set([incomingId,reserve.id].filter(Boolean))],intent:goalName(reserve.careerGoal),preconditions:["战队首发人数超过上限",`${entityName(reserve.id)} 当前首发能力最弱`],effects:[`${entityName(reserve.id)} 阵容位置改为替补`,`首发人数恢复到 ${STARTER_CAPACITY} 人以内`]});
         starters=state.entities.filter(entity=>entity.group===groupId&&entity.lineup==="starter");
       }
     }
@@ -577,13 +577,13 @@
       if(BASE_ENTITIES.some(entity=>entity.id===oldEntity))entitySelect.value=oldEntity;
       entitySelect.disabled=action==="chain";
       const target=BASE_ENTITIES.find(entity=>entity.id===entitySelect.value)||BASE_ENTITIES[0];
-      const groupSelect=$("groupSelect"),groupOptions=GROUPS.filter(group=>group.id!==target.group);
+      const groupSelect=$("groupSelect"),oldGroup=groupSelect.value,groupOptions=GROUPS.filter(group=>group.id!==target.group);
       groupSelect.innerHTML=groupOptions.map(group=>`<option value="${group.id}">${teamName(group.id)} · 当前 ${BASE_ENTITIES.filter(entity=>entity.group===group.id).length} 人</option>`).join("");
-      if(groupOptions.length&&!groupOptions.some(group=>group.id===groupSelect.value))groupSelect.value=groupOptions[0].id;
+      if(groupOptions.length)groupSelect.value=groupOptions.some(group=>group.id===oldGroup)?oldGroup:groupOptions[0].id;
       if(action==="chain")groupSelect.value="G1";
-      const partnerSelect=$("partnerSelect");
+      const partnerSelect=$("partnerSelect"),oldPartner=partnerSelect.value;
       partnerSelect.innerHTML=BASE_ENTITIES.filter(entity=>entity.id!==target.id).map(entity=>`<option value="${entity.id}">${entityName(entity.id)} · 关系 ${BASE_RELATIONS[edgeKey(target.id,entity.id)]??0}</option>`).join("");
-      if(!BASE_ENTITIES.some(entity=>entity.id===partnerSelect.value&&entity.id!==target.id))partnerSelect.value=BASE_ENTITIES.find(entity=>entity.id!==target.id).id;
+      partnerSelect.value=BASE_ENTITIES.some(entity=>entity.id===oldPartner&&entity.id!==target.id)?oldPartner:BASE_ENTITIES.find(entity=>entity.id!==target.id).id;
       $("groupSelect").disabled=action!=="move";
       $("attributeSelect").disabled=action!=="train";
       $("deltaSelect").disabled=action==="none";

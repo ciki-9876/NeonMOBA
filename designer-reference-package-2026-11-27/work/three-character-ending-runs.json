@@ -1,0 +1,811 @@
+[
+  {
+    "id": "01",
+    "choice": "签下周屿加入星火",
+    "chosenConfig": {
+      "action": "chain",
+      "entity": "C",
+      "group": "G1",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "B",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "chain",
+      "entity": "C",
+      "group": "G1",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "B",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "赤曜战队",
+        "lineup": "starter",
+        "morale": 75,
+        "goal": "争取首发",
+        "mentor": "青训选手 12",
+        "skill": 66.7,
+        "collaboration": 63.14,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.15,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.05,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [
+      {
+        "season": 0,
+        "title": "首发位置调整",
+        "actors": [
+          "周屿",
+          "林澈"
+        ],
+        "description": "林澈 暂列替补；星火战队首发保持在 5 人以内。",
+        "effects": [
+          "林澈 阵容位置改为替补",
+          "首发人数恢复到 5 人以内"
+        ],
+        "causeEventIds": [
+          "EV00001"
+        ]
+      },
+      {
+        "season": 1,
+        "title": "替补选手为上场机会转会",
+        "actors": [
+          "林澈",
+          "顾临"
+        ],
+        "description": "林澈 为了争取首发转入 赤曜战队，并得到队长 顾临 的支持。",
+        "effects": [
+          "林澈 转入 赤曜战队 并成为首发",
+          "与队长关系 +8，双方默契 +2",
+          "林澈 士气 +6"
+        ],
+        "causeEventIds": [
+          "EV00002"
+        ]
+      },
+      {
+        "season": 2,
+        "title": "队长主动带练队友",
+        "actors": [
+          "青训选手 12",
+          "林澈"
+        ],
+        "description": "青训选手 12 看见 林澈 想争取首发，主动带练；两人的默契提升，林澈 士气回升。",
+        "effects": [
+          "林澈 的导师设为 青训选手 12",
+          "林澈 默契 +2、士气 +3",
+          "导师默契 +1"
+        ],
+        "causeEventIds": []
+      }
+    ],
+    "worldStoryEventCount": 12,
+    "signature": "7EAF0B4C"
+  },
+  {
+    "id": "02",
+    "choice": "林澈转入零度",
+    "chosenConfig": {
+      "action": "move",
+      "entity": "A",
+      "group": "G2",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "B",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "move",
+      "entity": "A",
+      "group": "G2",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "B",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "赤曜战队",
+        "lineup": "starter",
+        "morale": 75,
+        "goal": "争取首发",
+        "mentor": "青训选手 12",
+        "skill": 66.7,
+        "collaboration": 63.12,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.15,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.14,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [
+      {
+        "season": 0,
+        "title": "首发位置调整",
+        "actors": [
+          "林澈"
+        ],
+        "description": "林澈 暂列替补；零度战队首发保持在 5 人以内。",
+        "effects": [
+          "林澈 阵容位置改为替补",
+          "首发人数恢复到 5 人以内"
+        ],
+        "causeEventIds": [
+          "EV00001"
+        ]
+      },
+      {
+        "season": 1,
+        "title": "替补选手为上场机会转会",
+        "actors": [
+          "林澈",
+          "顾临"
+        ],
+        "description": "林澈 为了争取首发转入 赤曜战队，并得到队长 顾临 的支持。",
+        "effects": [
+          "林澈 转入 赤曜战队 并成为首发",
+          "与队长关系 +8，双方默契 +2",
+          "林澈 士气 +6"
+        ],
+        "causeEventIds": [
+          "EV00002"
+        ]
+      },
+      {
+        "season": 2,
+        "title": "队长主动带练队友",
+        "actors": [
+          "青训选手 12",
+          "林澈"
+        ],
+        "description": "青训选手 12 看见 林澈 想争取首发，主动带练；两人的默契提升，林澈 士气回升。",
+        "effects": [
+          "林澈 的导师设为 青训选手 12",
+          "林澈 默契 +2、士气 +3",
+          "导师默契 +1"
+        ],
+        "causeEventIds": []
+      }
+    ],
+    "worldStoryEventCount": 12,
+    "signature": "EBA4D580"
+  },
+  {
+    "id": "03",
+    "choice": "苏遥转入赤曜",
+    "chosenConfig": {
+      "action": "move",
+      "entity": "B",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "A",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "move",
+      "entity": "B",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "A",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 66.7,
+        "collaboration": 59.1,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "赤曜战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.05,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [],
+    "worldStoryEventCount": 9,
+    "signature": "C36407B1"
+  },
+  {
+    "id": "04",
+    "choice": "周屿转入赤曜",
+    "chosenConfig": {
+      "action": "move",
+      "entity": "C",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "A",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "move",
+      "entity": "C",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 5,
+      "partner": "A",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 66.7,
+        "collaboration": 59.15,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "赤曜战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.1,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [],
+    "worldStoryEventCount": 9,
+    "signature": "EFC07128"
+  },
+  {
+    "id": "05",
+    "choice": "林澈专练操作 +10",
+    "chosenConfig": {
+      "action": "train",
+      "entity": "A",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "B",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "train",
+      "entity": "A",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "B",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 75.74,
+        "collaboration": 59.15,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [],
+    "worldStoryEventCount": 9,
+    "signature": "6834937C"
+  },
+  {
+    "id": "06",
+    "choice": "林澈专练默契 +10",
+    "chosenConfig": {
+      "action": "train",
+      "entity": "A",
+      "group": "G3",
+      "attribute": "collaboration",
+      "amount": 10,
+      "partner": "B",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "train",
+      "entity": "A",
+      "group": "G3",
+      "attribute": "collaboration",
+      "amount": 10,
+      "partner": "B",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 66.7,
+        "collaboration": 69.15,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [],
+    "worldStoryEventCount": 9,
+    "signature": "33D8374E"
+  },
+  {
+    "id": "07",
+    "choice": "苏遥专练操作 +10",
+    "chosenConfig": {
+      "action": "train",
+      "entity": "B",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "A",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "train",
+      "entity": "B",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "A",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 69,
+        "goal": "争取首发",
+        "mentor": "苏遥",
+        "skill": 66.7,
+        "collaboration": 61.15,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 82,
+        "collaboration": 76.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [
+      {
+        "season": 1,
+        "title": "队长主动带练队友",
+        "actors": [
+          "苏遥",
+          "林澈"
+        ],
+        "description": "苏遥 看见 林澈 想争取首发，主动带练；两人的默契提升，林澈 士气回升。",
+        "effects": [
+          "林澈 的导师设为 苏遥",
+          "林澈 默契 +2、士气 +3",
+          "导师默契 +1"
+        ],
+        "causeEventIds": []
+      }
+    ],
+    "worldStoryEventCount": 10,
+    "signature": "2A9C00D7"
+  },
+  {
+    "id": "08",
+    "choice": "周屿专练操作 +10",
+    "chosenConfig": {
+      "action": "train",
+      "entity": "C",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "A",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "train",
+      "entity": "C",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "A",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 66.7,
+        "collaboration": 59.15,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 84,
+        "collaboration": 64.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 3
+    },
+    "storyEvents": [
+      {
+        "season": 1,
+        "title": "队长主动带练队友",
+        "actors": [
+          "周屿",
+          "唐可"
+        ],
+        "description": "周屿 看见 唐可 想争取首发，主动带练；两人的默契提升，唐可 士气回升。",
+        "effects": [
+          "唐可 的导师设为 周屿",
+          "唐可 默契 +2、士气 +3",
+          "导师默契 +1"
+        ],
+        "causeEventIds": []
+      }
+    ],
+    "worldStoryEventCount": 10,
+    "signature": "F8AABC40"
+  },
+  {
+    "id": "09",
+    "choice": "林澈与苏遥双排 +10",
+    "chosenConfig": {
+      "action": "relation",
+      "entity": "A",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "B",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "relation",
+      "entity": "A",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "B",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 66.7,
+        "collaboration": 59.2,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 35,
+      "BC": 3
+    },
+    "storyEvents": [],
+    "worldStoryEventCount": 9,
+    "signature": "FAF540A2"
+  },
+  {
+    "id": "10",
+    "choice": "苏遥与周屿双排 +10",
+    "chosenConfig": {
+      "action": "relation",
+      "entity": "B",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "C",
+      "horizon": 5
+    },
+    "actualConfig": {
+      "action": "relation",
+      "entity": "B",
+      "group": "G3",
+      "attribute": "skill",
+      "amount": 10,
+      "partner": "C",
+      "horizon": 5
+    },
+    "allChecksPassed": true,
+    "people": [
+      {
+        "id": "A",
+        "name": "林澈",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 66,
+        "goal": "争取首发",
+        "mentor": null,
+        "skill": 66.7,
+        "collaboration": 59.15,
+        "potential": 86
+      },
+      {
+        "id": "B",
+        "name": "苏遥",
+        "team": "星火战队",
+        "lineup": "starter",
+        "morale": 76,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 73.56,
+        "collaboration": 75.2,
+        "potential": 82
+      },
+      {
+        "id": "C",
+        "name": "周屿",
+        "team": "零度战队",
+        "lineup": "starter",
+        "morale": 70,
+        "goal": "带队争冠",
+        "mentor": null,
+        "skill": 78.27,
+        "collaboration": 63.15,
+        "potential": 84
+      }
+    ],
+    "relationships": {
+      "AB": 25,
+      "BC": 13
+    },
+    "storyEvents": [],
+    "worldStoryEventCount": 9,
+    "signature": "78A26AE2"
+  }
+]
