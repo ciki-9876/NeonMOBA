@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f4f1">
+  <title>生涯模拟｜选择测试</title>
+  <style>
+    :root{color-scheme:light;--bg:#f2f4f1;--panel:#fff;--ink:#202a27;--muted:#66736d;--soft:#89948e;--line:#dce2dd;--line2:#edf0ed;--green:#287653;--green-bg:#e9f4ed;--red:#a8453d;--red-bg:#f8ecea;--amber:#8a6419;--amber-bg:#f8f1dd;--blue:#315b78;--blue-bg:#edf3f7;--mono:ui-monospace,"Cascadia Code",Consolas,monospace;--sans:"Microsoft YaHei","PingFang SC",sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans)}button,select{font:inherit}button{cursor:pointer}.shell{max-width:1360px;margin:auto;padding:30px 28px 44px}.header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding-bottom:21px;border-bottom:1px solid var(--line)}h1{font-size:25px;line-height:1.2;letter-spacing:-.03em;margin:0 0 7px;font-weight:650}.subtitle{color:var(--muted);font-size:12px;margin:0}.sysmeta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.badge{border:1px solid var(--line);background:#fff;padding:5px 8px;color:var(--muted);font:9px var(--mono);letter-spacing:.06em}.badge strong{color:var(--green);font-weight:600}.section{margin-top:17px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;min-width:0}.panel-head{min-height:43px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line2)}.panel-head h2{font-size:12px;margin:0;font-weight:650}.panel-head small,.micro{font:9px var(--mono);letter-spacing:.07em;color:var(--soft)}.panel-body{padding:14px}.topgrid{display:grid;grid-template-columns:1.05fr .95fr;gap:13px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 13px}.field{min-width:0}.field label{display:block;color:var(--muted);font-size:10px;margin:0 0 5px}.field select{appearance:none;width:100%;height:34px;border:1px solid var(--line);background:#fbfcfb;color:var(--ink);padding:0 9px;border-radius:3px;outline:none}.field select:focus{border-color:#7aa58b;box-shadow:0 0 0 2px #2876531a}.field select:disabled{color:#8b9690;background:#f4f6f4}.inline-actions{display:flex;gap:7px;align-items:end;margin-top:13px}.primary{height:36px;border:1px solid var(--green);background:var(--green);color:white;border-radius:3px;padding:0 14px;font-weight:650;font-size:11px}.primary:hover{background:#216446}.secondary{height:34px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:3px;padding:0 10px;font-size:10px}.secondary:hover:not(:disabled){border-color:#91a59a;background:#f8faf8}.secondary:disabled,.primary:disabled{opacity:.45;cursor:not-allowed}.horizon{width:96px}.expected{display:grid;gap:7px}.expected-row{display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:8px 9px;border:1px solid var(--line2);background:#fbfcfb;border-radius:3px}.expected-index{font:9px var(--mono);color:var(--soft);padding-top:1px}.expected-text{font-size:10px;color:var(--ink)}.expected-rule{font:8px var(--mono);color:var(--blue);white-space:nowrap;padding-top:2px}.summary-strip{display:grid;grid-template-columns:1.2fr repeat(3,.6fr);gap:9px}.summary-card{min-height:72px;padding:11px 13px;background:var(--panel);border:1px solid var(--line);border-radius:4px}.summary-label{font-size:9px;color:var(--muted)}.summary-value{font:20px/1.15 var(--mono);margin-top:7px;letter-spacing:-.04em}.summary-card:first-child .summary-value{font:14px/1.5 var(--sans);letter-spacing:0}.summary-value.pass{color:var(--green)}.summary-value.fail{color:var(--red)}.resultgrid{display:grid;grid-template-columns:1.1fr .9fr;gap:13px}.assertions{width:100%;border-collapse:collapse}.assertions th{font:9px var(--mono);color:var(--soft);text-align:left;padding:0 7px 8px;border-bottom:1px solid var(--line)}.assertions td{font-size:10px;padding:8px 7px;border-bottom:1px solid var(--line2);vertical-align:top}.assertions tr:last-child td{border-bottom:0}.assertions td:nth-child(1){font:9px var(--mono);color:var(--blue);white-space:nowrap}.assertions td:nth-child(4){text-align:right;white-space:nowrap}.assertion-detail{display:block;color:var(--muted);font-size:9px;margin-top:3px}.verdict{display:inline-block;min-width:38px;text-align:center;padding:2px 5px;border-radius:2px;font:8px var(--mono);letter-spacing:.04em}.verdict.pass{background:var(--green-bg);color:var(--green)}.verdict.fail{background:var(--red-bg);color:var(--red)}.verdict.pending{background:#f1f3f1;color:var(--soft)}.causal-list{display:grid;gap:0}.causal-item{display:grid;grid-template-columns:38px 1fr;gap:9px;padding:10px 0;border-bottom:1px solid var(--line2)}.causal-item:last-child{border-bottom:0}.step-tag{font:9px var(--mono);color:var(--blue);padding-top:2px}.causal-title{font-size:10px;font-weight:650}.causal-desc{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.65}.chain{font:9px/1.7 var(--mono);color:#51615a;margin-top:5px;overflow-wrap:anywhere}.empty{padding:18px 7px;color:var(--soft);font-size:10px}.snapshot-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:13px}.table-wrap{overflow:auto}.state-table,.edge-table{width:100%;border-collapse:collapse;white-space:nowrap}.state-table th,.edge-table th{font:9px var(--mono);color:var(--soft);text-align:left;padding:0 9px 8px;border-bottom:1px solid var(--line)}.state-table td,.edge-table td{font-size:10px;padding:8px 9px;border-bottom:1px solid var(--line2)}.state-table tr:last-child td,.edge-table tr:last-child td{border-bottom:0}.entity-id{font:10px var(--mono);font-weight:700}.changed{color:var(--green);font-family:var(--mono)}.group-cards{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}.group-chip{border:1px solid var(--line);padding:6px 8px;border-radius:3px;min-width:108px}.group-chip b{font:9px var(--mono)}.group-chip span{display:block;color:var(--muted);font-size:8px;margin-top:3px}.periods{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.period{border:1px solid var(--line);padding:9px 10px;border-radius:3px;background:#fff;min-height:73px}.period.current{border-color:#8bb39a;background:#f4faf5}.period-num{font:9px var(--mono);color:var(--soft)}.period-main{font-size:10px;font-weight:650;margin-top:6px}.period-sub{font-size:8px;color:var(--muted);margin-top:3px}.knowledge{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;background:var(--blue-bg);border:1px solid #dbe6ed;border-radius:3px;color:#405d70;font-size:9px;line-height:1.7}.knowledge strong{white-space:nowrap;font:9px var(--mono)}.foot{padding:13px 2px 0;color:var(--soft);font-size:9px;line-height:1.7}.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,14px);opacity:0;pointer-events:none;background:#26332e;color:#fff;padding:9px 13px;border-radius:3px;font-size:10px;transition:.18s}.toast.show{opacity:1;transform:translate(-50%,0)}
+    @media(max-width:920px){.topgrid,.resultgrid,.snapshot-grid{grid-template-columns:1fr}.summary-strip{grid-template-columns:1fr 1fr}.summary-card:first-child{grid-column:1/-1}.sysmeta{max-width:240px}.periods{grid-template-columns:repeat(5,minmax(88px,1fr));overflow:auto;padding-bottom:3px}}
+    @media(max-width:600px){.shell{padding:20px 12px 34px}.header{display:block}.sysmeta{justify-content:flex-start;max-width:none;margin-top:13px}.form-grid{grid-template-columns:1fr}.inline-actions{flex-wrap:wrap}.primary{flex:1}.summary-strip{gap:6px}.summary-card{padding:9px}.assertions td:nth-child(3){max-width:180px;white-space:normal}.panel-body{padding:11px}.expected-row{grid-template-columns:18px 1fr}.expected-rule{grid-column:2}.group-chip{min-width:calc(50% - 4px)}}
+    .form-note{color:var(--muted);font-size:9px;margin:8px 0 0}
+    .stepper{display:grid;grid-template-columns:1fr 36px 1fr 36px 1fr;align-items:center;max-width:780px;margin:21px auto 23px}.step-link{display:flex;align-items:center;gap:9px;border:0;background:transparent;color:var(--soft);text-align:left;padding:4px 2px}.step-link:disabled{cursor:default}.step-number{display:grid;place-items:center;width:25px;height:25px;border:1px solid var(--line);border-radius:50%;font:10px var(--mono);background:#fff}.step-label{font-size:10px}.step-link.active{color:var(--ink);font-weight:650}.step-link.active .step-number,.step-link.done .step-number{border-color:var(--green);background:var(--green);color:#fff}.step-link.done{color:var(--green)}.step-rule{height:1px;background:var(--line)}.step-rule.done{background:var(--green)}.wizard-pane{display:none}.wizard-pane.active{display:block;animation:step-in .24s ease-out}@keyframes step-in{from{opacity:.45;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}.step-intro{margin:0 0 14px}.step-intro small{font:9px var(--mono);color:var(--green);letter-spacing:.1em}.step-intro h2{font-size:19px;letter-spacing:-.02em;margin:5px 0 3px}.step-intro p{font-size:10px;color:var(--muted);margin:0;line-height:1.7}.wizard-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:15px 0 3px}.wizard-actions .primary{min-width:180px}.details-panel{border:1px solid var(--line);background:#fff;border-radius:4px}.details-panel summary{cursor:pointer;list-style:none;padding:12px 14px;font-size:10px;font-weight:650}.details-panel summary::-webkit-details-marker{display:none}.details-panel summary:after{content:"＋";float:right;color:var(--soft);font:12px var(--mono)}.details-panel[open] summary:after{content:"−"}.details-content{padding:0 12px 12px}.details-content>.section:first-child{margin-top:0}.causal-list{max-height:420px;overflow:auto}
+    @media(max-width:600px){.stepper{grid-template-columns:1fr 15px 1fr 15px 1fr;margin:16px auto}.step-link{gap:5px}.step-number{width:22px;height:22px}.step-label{font-size:9px}.step-intro h2{font-size:17px}.wizard-actions{align-items:stretch;flex-wrap:wrap}.wizard-actions button{flex:1}.details-content{padding:0 8px 9px}}
+    .batch-lead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.batch-progress{height:5px;background:#edf0ed;border-radius:4px;overflow:hidden;margin-top:9px}.batch-progress span{display:block;height:100%;width:0;background:var(--green);transition:width .12s}.batch-status{font-size:10px;color:var(--muted);margin:0}.batch-details{margin-top:12px;border-top:1px solid var(--line2);padding-top:10px}.batch-details summary{cursor:pointer;font-size:10px;font-weight:650}.batch-table{width:100%;border-collapse:collapse;margin-top:9px}.batch-table th,.batch-table td{text-align:left;font-size:9px;padding:7px;border-bottom:1px solid var(--line2);vertical-align:top}.batch-table th{font:8px var(--mono);color:var(--soft)}.batch-table td:last-child{text-align:right;white-space:nowrap}.batch-fixtures{display:grid;gap:5px;margin-top:9px}.batch-fixture{display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 8px;background:#fbfcfb;border:1px solid var(--line2);font-size:9px}.batch-fixture small{color:var(--muted)}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div><h1>生涯模拟 · 选择测试</h1><p class="subtitle">选一项赛前决定，看看选手和战队如何变化，再核对赛果是否符合预期。</p></div>
+      <div class="sysmeta"><span class="badge"><strong>赛季模拟</strong> / 固定规则</span><span class="badge">选手 / 50</span><span class="badge">战队 / 10</span><span class="badge">观察 / 最多 5 赛季</span></div>
+    </header>
+
+    <nav class="stepper" aria-label="测试流程">
+      <button class="step-link active" id="stepLink1"><span class="step-number">1</span><span class="step-label">赛前决定</span></button><span class="step-rule" id="stepRule1"></span>
+      <button class="step-link" id="stepLink2" disabled><span class="step-number">2</span><span class="step-label">查看变化</span></button><span class="step-rule" id="stepRule2"></span>
+      <button class="step-link" id="stepLink3" disabled><span class="step-number">3</span><span class="step-label">核对赛果</span></button>
+    </nav>
+
+    <section class="wizard-pane active" id="stepPane1">
+      <div class="step-intro"><small>第 1 步 / 赛季开始前</small><h2>先做一个决定</h2><p>选一名选手或一组队友，看看这次决定会怎样影响阵容、默契和后续赛季。</p></div>
+      <section class="section topgrid">
+        <section class="panel">
+          <div class="panel-head"><h2>本赛季安排</h2><small>每轮从相同的赛季初状态开始</small></div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <div class="field"><label for="actionSelect">你要做什么</label><select id="actionSelect"><option value="move">签约 / 转会一名选手</option><option value="chain">测试三人连锁：签入周屿</option><option value="train">安排专项训练</option><option value="relation">安排两人双排</option><option value="none">暂不干预，观察赛季</option></select></div>
+              <div class="field"><label for="entitySelect">相关选手</label><select id="entitySelect"></select></div>
+              <div class="field" id="groupField"><label for="groupSelect">转入战队</label><select id="groupSelect"></select></div>
+              <div class="field" id="attributeField" hidden><label for="attributeSelect">训练方向</label><select id="attributeSelect"><option value="skill">操作能力</option><option value="collaboration">团队默契</option><option value="discipline">训练稳定</option></select></div>
+              <div class="field" id="deltaField" hidden><label for="deltaSelect">训练投入</label><select id="deltaSelect"><option value="2">小幅提升 +2</option><option value="5" selected>常规提升 +5</option><option value="10">集中提升 +10</option></select></div>
+              <div class="field" id="partnerField" hidden><label for="partnerSelect">双排搭档</label><select id="partnerSelect"></select></div>
+              <div class="field"><label for="horizonSelect">模拟几个赛季</label><select id="horizonSelect" class="horizon"><option value="1">1 个赛季</option><option value="2">2 个赛季</option><option value="3">3 个赛季</option><option value="4">4 个赛季</option><option value="5" selected>5 个赛季</option></select></div>
+            </div>
+            <div class="inline-actions"><button class="primary" id="runButton">执行选择，模拟赛季 →</button><button class="secondary" id="resetButton">重新开始</button></div>
+            <p class="form-note">每次测试都从同一个赛季初开始，不会叠加上一轮的选手数值。</p>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>预期会发生什么</h2><small id="expectedMode">4 项预期结果</small></div>
+          <div class="panel-body expected" id="expectedList"></div>
+        </section>
+      </section>
+    </section>
+
+    <section class="wizard-pane" id="stepPane2">
+      <div class="step-intro"><small>第 2 步 / 赛季结算</small><h2>看看这次决定带来了什么</h2><p>先看直接变化与连锁事件；完整数值可以展开查看。</p></div>
+      <section class="section summary-strip" aria-live="polite">
+        <div class="summary-card"><div class="summary-label">选择结果</div><div class="summary-value" id="resultHeadline">等待赛季结算</div></div>
+        <div class="summary-card"><div class="summary-label">直接变化</div><div class="summary-value" id="passCount">—</div></div>
+        <div class="summary-card"><div class="summary-label">模拟赛季</div><div class="summary-value" id="stepCount">—</div></div>
+        <div class="summary-card"><div class="summary-label">赛果编号</div><div class="summary-value" id="fingerprint" style="font-size:13px">—</div></div>
+      </section>
+      <section class="section panel">
+        <div class="panel-head"><h2>赛季里发生的事</h2><small id="traceCount">尚无记录</small></div>
+        <div class="panel-body causal-list" id="causalList"><div class="empty">完成赛季模拟后，会在这里显示决定如何传导到其他选手和战队。</div></div>
+      </section>
+      <details class="section details-panel" id="detailsPanel">
+        <summary>展开完整赛后数据：选手状态、队友关系、战队战力与各赛季变化</summary>
+        <div class="details-content">
+          <section class="section snapshot-grid">
+            <section class="panel">
+              <div class="panel-head"><h2>选手状态</h2><small id="stateLabel">赛季初</small></div>
+              <div class="panel-body">
+                <div class="table-wrap"><table class="state-table"><thead><tr><th>选手</th><th>所属战队</th><th>阵容位置</th><th>个人目标</th><th>士气</th><th>导师</th><th>操作</th><th>默契</th><th>训练稳定</th><th>成长上限</th></tr></thead><tbody id="entityRows"></tbody></table></div>
+                <div class="group-cards" id="groupCards"></div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head"><h2>队友关系</h2><small id="edgeMode">按选手筛选关系</small></div>
+              <div class="panel-body table-wrap"><table class="edge-table"><thead><tr><th>选手组合</th><th>关系值</th><th>赛场影响</th></tr></thead><tbody id="edgeRows"></tbody></table></div>
+            </section>
+          </section>
+          <section class="section panel">
+            <div class="panel-head"><h2>逐赛季变化</h2><small>最多 5 个赛季</small></div>
+            <div class="panel-body"><div class="periods" id="periodRows"></div></div>
+          </section>
+        </div>
+      </details>
+      <div class="wizard-actions"><button class="secondary" id="backToChoice">← 修改赛前选择</button><button class="primary" id="toCheckButton">下一步：核对是否符合预期 →</button></div>
+    </section>
+
+    <section class="wizard-pane" id="stepPane3">
+      <div class="step-intro"><small>第 3 步 / 对照预期</small><h2>这次赛果符合预期吗？</h2><p>每一项都对照刚才的选择、赛季结果和系统规则；出现不通过项时，可以从前两步回看原因。</p></div>
+      <section class="section panel">
+        <div class="panel-head"><h2>赛后检查清单</h2><small>预期结果 / 实际赛果</small></div>
+        <div class="panel-body table-wrap" id="assertionWrap"><div class="empty">完成一次赛季模拟后，显示检查结果。</div></div>
+      </section>
+      <section class="section panel">
+        <div class="panel-head"><h2>扩展检验：1000 条五赛季发展路线</h2><small>50 名选手 / 10 支战队</small></div>
+        <div class="panel-body">
+          <div class="batch-lead"><button class="primary" id="runBatchButton">自动跑 1000 条发展路线</button><p class="batch-status" id="batchStatus">检查不同选择能否产生不同后续、每条记录是否能追溯原因。</p></div>
+          <div class="batch-progress" aria-label="批量检验进度"><span id="batchProgress"></span></div>
+          <div id="batchResult" class="empty">进入本步骤后，可运行自动检验；每条路线包含 5 个赛季和多次选择。</div>
+          <details class="batch-details" id="batchDetails" hidden><summary>展开规则覆盖和边界场景</summary><div id="batchChecks"></div></details>
+        </div>
+      </section>
+      <section class="section panel">
+        <div class="panel-head"><h2>重开后带走的记忆</h2><small id="knowledgeCount">0 条记忆</small></div>
+        <div class="panel-body" id="knowledgeBody"><div class="knowledge"><strong>提示</strong><span>完成本轮后，可以重开一轮。选手能力、战队和关系回到初始状态，本轮观察到的经验会保留。</span></div></div>
+      </section>
+      <div class="wizard-actions"><button class="secondary" id="backToResult">← 回看赛季变化</button><button class="secondary" id="anotherTestButton">再测一个选择</button><button class="primary" id="rebirthButton" disabled>重开一轮，保留记忆 ↻</button></div>
+    </section>
+
+    <footer class="foot">每次测试都使用相同的赛季初状态；改变一项选择，再观察选手、队友关系和战队战力如何变化。相同选择应产生相同赛果编号。</footer>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    "use strict";
+    const MAX_STEPS=5;
+    const SEED=4107;
+    const STARTER_CAPACITY=5;
+    const GROUPS=[
+      {id:"G1",name:"星火战队",base:54},{id:"G2",name:"零度战队",base:59},{id:"G3",name:"赤曜战队",base:35},
+      {id:"G4",name:"霜刃战队",base:50},{id:"G5",name:"远帆战队",base:51},{id:"G6",name:"山海战队",base:52},
+      {id:"G7",name:"青云战队",base:53},{id:"G8",name:"白鹭战队",base:54},{id:"G9",name:"长夜战队",base:55},{id:"G10",name:"朝夕战队",base:56}
+    ];
+    const TEAM_NAMES=Object.fromEntries(GROUPS.map(group=>[group.id,group.name]));
+    const GOAL_NAMES={earn_starting_role:"争取首发",team_leadership:"带队争冠",mentor_teammates:"带练队友",build_trust:"建立默契",seek_transfer:"寻找新机会"};
+    const CORE_ENTITIES=[
+      {id:"A",group:"G1",skill:62,collaboration:58,discipline:64,potential:86,lineup:"starter",benchSince:null,benchEventId:null,transferRequested:false,careerGoal:"earn_starting_role",ambition:86,morale:66,loyalty:54,captain:false,mentorId:null},
+      {id:"B",group:"G1",skill:70,collaboration:74,discipline:66,potential:82,lineup:"starter",benchSince:null,benchEventId:null,transferRequested:false,careerGoal:"team_leadership",ambition:72,morale:76,loyalty:88,captain:true,mentorId:null},
+      {id:"C",group:"G2",skill:75,collaboration:62,discipline:78,potential:84,lineup:"starter",benchSince:null,benchEventId:null,transferRequested:false,careerGoal:"team_leadership",ambition:90,morale:70,loyalty:75,captain:true,mentorId:null},
+      {id:"D",group:"G2",skill:67,collaboration:80,discipline:70,potential:79,lineup:"starter",benchSince:null,benchEventId:null,transferRequested:false,careerGoal:"build_trust",ambition:64,morale:72,loyalty:81,captain:false,mentorId:null},
+      {id:"E",group:"G3",skill:72,collaboration:68,discipline:76,potential:90,lineup:"starter",benchSince:null,benchEventId:null,transferRequested:false,careerGoal:"mentor_teammates",ambition:74,morale:78,loyalty:90,captain:true,mentorId:null}
+    ];
+    const BASE_ENTITIES=(()=>{
+      const entities=CORE_ENTITIES.map(entity=>({...entity}));
+      let next=6;
+      for(const group of GROUPS){
+        const fillerCount=group.id==="G1"||group.id==="G2"?3:group.id==="G3"?4:5;
+        for(let slot=0;slot<fillerCount;slot++){
+          const index=next++,id=`N${String(index).padStart(2,"0")}`;
+          entities.push({id,group:group.id,skill:62+(index*7%15),collaboration:64+(index*11%16),discipline:67+(index*13%16),potential:82+(index*3%12),lineup:id==="N15"?"reserve":"starter",benchSince:null,benchEventId:null,transferRequested:false,careerGoal:Object.keys(GOAL_NAMES)[index%Object.keys(GOAL_NAMES).length],ambition:45+(index*9%51),morale:55+(index*7%36),loyalty:50+(index*11%45),captain:slot===0&&!["G1","G2","G3"].includes(group.id),mentorId:null});
+        }
+      }
+      return entities;
+    })();
+    function createBaseRelations(entities){
+      const relations={};
+      for(let first=0;first<entities.length;first++)for(let second=first+1;second<entities.length;second++)relations[[entities[first].id,entities[second].id].sort().join("|")]=((first*17+second*23+SEED)%39)-8;
+      Object.assign(relations,{"A|B":25,"A|C":-4,"A|D":2,"A|E":0,"B|C":3,"B|D":-8,"B|E":5,"C|D":30,"C|E":-3,"D|E":4});
+      return relations;
+    }
+    const BASE_RELATIONS=createBaseRelations(BASE_ENTITIES);
+    const ENTITY_NAMES={A:"林澈",B:"苏遥",C:"周屿",D:"唐可",E:"顾临"};
+    for(let index=6;index<=50;index++)ENTITY_NAMES[`N${String(index).padStart(2,"0")}`]=`青训选手 ${String(index).padStart(2,"0")}`;
+    const ATTRIBUTE_NAMES={skill:"操作",collaboration:"默契",discipline:"训练稳定"};
+    const ACTION_NAMES={move:"签约 / 转会",chain:"三人连锁测试",train:"专项训练",relation:"双排磨合",none:"观察赛季"};
+    const $=id=>document.getElementById(id);
+    const clone=value=>JSON.parse(JSON.stringify(value));
+    const clamp=(value,min=0,max=100)=>Math.max(min,Math.min(max,value));
+    const edgeKey=(a,b)=>[a,b].sort().join("|");
+    const getEntity=(world,id)=>world.entities.find(entity=>entity.id===id);
+    const groupById=id=>GROUPS.find(group=>group.id===id);
+    const entityName=id=>ENTITY_NAMES[id]||id;
+    const teamName=id=>TEAM_NAMES[id]||id;
+    const goalName=id=>GOAL_NAMES[id]||id;
+    const attributeName=id=>ATTRIBUTE_NAMES[id]||id;
+    const relationValue=(world,a,b)=>a===b?100:(world.relations[edgeKey(a,b)]??0);
+    const setRelation=(world,a,b,value)=>{if(a!==b)world.relations[edgeKey(a,b)]=clamp(value,-100,100);};
+    const worldBase=knowledge=>({step:0,eventSeq:0,entities:clone(BASE_ENTITIES),relations:{...BASE_RELATIONS},relationCauses:{},knowledge:clone(knowledge||[]),trace:[],diffs:[],periods:[],triggered:{}});
+    let world=worldBase([]);
+    let latestAssertions=[];
+    let latestAction=null;
+    let currentStep=1;
+    let maxReachedStep=1;
+    let canRebirth=false;
+
+    function toast(message){
+      const element=$("toast");
+      element.textContent=message;
+      element.classList.add("show");
+      setTimeout(()=>element.classList.remove("show"),1800);
+    }
+    function groupScore(state,groupId){
+      const members=state.entities.filter(entity=>entity.group===groupId);
+      let score=groupById(groupId).base+members.reduce((sum,entity)=>sum+(entity.lineup==="reserve"?.25:1)*(entity.skill*.085+entity.collaboration*.035+entity.discipline*.02),0);
+      for(let first=0;first<members.length;first++)for(let second=first+1;second<members.length;second++)score+=relationValue(state,members[first].id,members[second].id)*.012;
+      return Number(score.toFixed(2));
+    }
+    function groupScores(state){return Object.fromEntries(GROUPS.map(group=>[group.id,groupScore(state,group.id)]));}
+    function addTrace(state,step,rule,title,description,chain=[],metadata={}){
+      state.eventSeq=(state.eventSeq||0)+1;
+      const id=`EV${String(state.eventSeq).padStart(5,"0")}`;
+      state.trace.unshift({id,step,rule,title,description,chain,...metadata});
+      return id;
+    }
+    function addDiff(state,step,entity,field,before,after,source){if(before!==after)state.diffs.unshift({step,entity,field,before,after,source});}
+    function enforceRosterCapacity(state,groupId,step,incomingId="",causeEventId=""){
+      let starters=state.entities.filter(entity=>entity.group===groupId&&entity.lineup==="starter");
+      while(starters.length>STARTER_CAPACITY){
+        const reserve=starters.slice().sort((a,b)=>(a.skill+a.collaboration+a.discipline)-(b.skill+b.collaboration+b.discipline)||a.id.localeCompare(b.id))[0];
+        const oldLineup=reserve.lineup;
+        reserve.lineup="reserve";reserve.benchSince=["earn_starting_role","seek_transfer"].includes(reserve.careerGoal)&&reserve.ambition>=55?step:null;
+        addDiff(state,step,reserve.id,"lineup",oldLineup,reserve.lineup,"R-05");
+        reserve.benchEventId=addTrace(state,step,"R-05","首发位置调整",`${entityName(reserve.id)} 暂列替补；${teamName(groupId)}首发保持在 ${STARTER_CAPACITY} 人以内。`,[`${entityName(incomingId||reserve.id)} 转入 ${teamName(groupId)} → 首发人数达到上限`,`${entityName(reserve.id)} 的目标是${goalName(reserve.careerGoal)} → 暂列替补后会考虑其他上场机会`],{causeEventIds:causeEventId?[causeEventId]:[],actors:[incomingId,reserve.id].filter(Boolean),intent:goalName(reserve.careerGoal),preconditions:["战队首发人数超过上限",`${entityName(reserve.id)} 当前首发能力最弱`],effects:[`${entityName(reserve.id)} 阵容位置改为替补`,`首发人数恢复到 ${STARTER_CAPACITY} 人以内`]});
+        starters=state.entities.filter(entity=>entity.group===groupId&&entity.lineup==="starter");
+      }
+    }
+    function applyIntervention(state,config){
+      const actionStep=state.step;
+      const scoreBefore=groupScores(state);
+      const target=getEntity(state,config.entity);
+      if(config.action==="move"){
+        const oldGroup=target.group;
+        target.group=config.group;
+        addDiff(state,actionStep,target.id,"group",oldGroup,target.group,"INPUT / R-01");
+        const actionEventId=addTrace(state,actionStep,"R-01","签约结果写入",`${entityName(target.id)} 从 ${teamName(oldGroup)} 转入 ${teamName(target.group)}。`,[`签约完成：${entityName(target.id)} → ${teamName(target.group)}`,`${teamName(oldGroup)}失去一名选手 → 两队战力重新结算`],{actors:[target.id],intent:goalName(target.careerGoal),preconditions:[`${entityName(target.id)} 接受转会`],effects:[`${entityName(target.id)} 所属战队改为 ${teamName(target.group)}`]});
+        enforceRosterCapacity(state,target.group,actionStep,target.id,actionEventId);
+      }else if(config.action==="chain"){
+        const oldGroup=target.group;
+        target.group="G1";target.lineup="starter";target.benchSince=null;
+        addDiff(state,actionStep,target.id,"group",oldGroup,target.group,"INPUT / R-01");
+        const actionEventId=addTrace(state,actionStep,"R-01","周屿签入星火战队",`${entityName(target.id)} 从 ${teamName(oldGroup)} 转入 ${teamName(target.group)}，进入首发阵容。`,[`签下周屿 → 星火首发人数超过 ${STARTER_CAPACITY} 人`,`林澈的目标是争取首发 → 首发竞争影响后续选择`],{actors:[target.id],intent:goalName(target.careerGoal),preconditions:[`${entityName(target.id)} 与星火战队完成签约`],effects:[`${entityName(target.id)} 所属战队改为星火战队`]});
+        enforceRosterCapacity(state,target.group,actionStep,target.id,actionEventId);
+      }else if(config.action==="train"){
+        const oldValue=target[config.attribute];
+        const newValue=config.attribute==="skill"?clamp(oldValue+config.amount,0,target.potential):clamp(oldValue+config.amount);
+        target[config.attribute]=newValue;
+        addDiff(state,actionStep,target.id,config.attribute,oldValue,newValue,"INPUT / R-01");
+        addTrace(state,actionStep,"R-01","训练成果写入",`${entityName(target.id)} 的${attributeName(config.attribute)}提升 ${newValue-oldValue}。`,[`训练完成：${entityName(target.id)} ${attributeName(config.attribute)} ${oldValue} → ${newValue}`,"个人提升 → 所属战队战力重新结算"],{actors:[target.id],intent:goalName(target.careerGoal),preconditions:["赛季训练安排已确认"],effects:[`${entityName(target.id)} 的${attributeName(config.attribute)}提升 ${newValue-oldValue}`]});
+      }else if(config.action==="relation"){
+        const oldValue=relationValue(state,target.id,config.partner);
+        const newValue=clamp(oldValue+config.amount,-100,100);
+        setRelation(state,target.id,config.partner,newValue);
+        addDiff(state,actionStep,edgeKey(target.id,config.partner),"relation",oldValue,newValue,"INPUT / R-01");
+        const relationEventId=addTrace(state,actionStep,"R-01","双排磨合结果写入",`${entityName(target.id)} 与 ${entityName(config.partner)} 的关系提升 ${newValue-oldValue}。`,[`双排磨合：${entityName(target.id)} ↔ ${entityName(config.partner)} ${oldValue} → ${newValue}`,"关系变化 → 默契事件与战队协同重新结算"],{actors:[target.id,config.partner],intent:`${goalName(target.careerGoal)}；${goalName(getEntity(state,config.partner).careerGoal)}`,preconditions:["两名选手完成双排磨合"],effects:[`关系值从 ${oldValue} 变为 ${newValue}`]});
+        state.relationCauses[edgeKey(target.id,config.partner)]=relationEventId;
+      }else{
+        addTrace(state,actionStep,"BASELINE","选择观察本赛季","没有签约、训练或安排双排；选手照常成长，战队按现有阵容参赛。",["赛前不做调整","选手自然成长 → 战队按原阵容结算"],{actors:[],intent:"观察赛季",preconditions:["没有主动安排"],effects:["世界进入自然演化"]});
+      }
+      const scoreAfter=groupScores(state);
+      const changed=GROUPS.filter(group=>scoreBefore[group.id]!==scoreAfter[group.id]).map(group=>`${teamName(group.id)} 战力 ${scoreBefore[group.id]} → ${scoreAfter[group.id]}`);
+      addTrace(state,actionStep,"R-02","战队战力重新结算",changed.length?`这次赛前安排改变了 ${changed.length} 支战队的战力。`:`这次安排没有改变战队战力。`,changed.length?changed:["战力保持不变"]);
+      return {scoreBefore,scoreAfter};
+    }
+    function processBondRules(state,step){
+      Object.entries(state.relations).forEach(([key,value])=>{
+        if(value<40||state.triggered[`bond:${key}`])return;
+        state.triggered[`bond:${key}`]=true;
+        const [first,second]=key.split("|"),a=getEntity(state,first),b=getEntity(state,second);
+        const oldA=a.collaboration,oldB=b.collaboration;
+        a.collaboration=clamp(a.collaboration+2);b.collaboration=clamp(b.collaboration+2);
+        addDiff(state,step,first,"collaboration",oldA,a.collaboration,"R-04");
+        addDiff(state,step,second,"collaboration",oldB,b.collaboration,"R-04");
+        addTrace(state,step,"R-04","默契搭档事件触发",`${entityName(first)} 与 ${entityName(second)} 的关系达到 ${value}，形成固定双排搭档；两人的团队默契各提升 2。`,[`关系值 ${value} 达到搭档门槛 40`,`团队默契：${entityName(first)} +2 / ${entityName(second)} +2`],{causeEventIds:state.relationCauses[key]?[state.relationCauses[key]]:[],actors:[first,second],intent:`${goalName(a.careerGoal)}；${goalName(b.careerGoal)}`,preconditions:[`关系值 ${value} ≥ 40`,`这组搭档事件尚未触发`],effects:[`${entityName(first)} 与 ${entityName(second)} 成为固定搭档`,`双方团队默契各提升 2`]});
+      });
+    }
+    function processRivalryRules(state,step){
+      for(let first=0;first<state.entities.length;first++)for(let second=first+1;second<state.entities.length;second++){
+        const a=state.entities[first],b=state.entities[second],key=edgeKey(a.id,b.id);
+        if(a.group!==b.group||a.lineup!=="starter"||b.lineup!=="starter"||relationValue(state,a.id,b.id)>-6||state.triggered[`rivalry:${key}`])continue;
+        if(!["earn_starting_role","team_leadership"].includes(a.careerGoal)&&!["earn_starting_role","team_leadership"].includes(b.careerGoal))continue;
+        state.triggered[`rivalry:${key}`]=true;
+        const oldRelation=relationValue(state,a.id,b.id),oldAMorale=a.morale,oldBMorale=b.morale;
+        setRelation(state,a.id,b.id,oldRelation-2);a.morale=clamp(a.morale-4);b.morale=clamp(b.morale-4);
+        addDiff(state,step,key,"relation",oldRelation,relationValue(state,a.id,b.id),"R-08");
+        addDiff(state,step,a.id,"morale",oldAMorale,a.morale,"R-08");addDiff(state,step,b.id,"morale",oldBMorale,b.morale,"R-08");
+        addTrace(state,step,"R-08","首发竞争演变为队内摩擦",`${entityName(a.id)} 与 ${entityName(b.id)} 都在争取成绩，负面关系影响队内协作。`,[`同队首发竞争 → 关系值 ${oldRelation} 低于 -5`,`两人目标：${goalName(a.careerGoal)} / ${goalName(b.careerGoal)}`,"摩擦出现 → 双方士气各下降 4，关系再下降 2"],{causeEventIds:state.relationCauses[key]?[state.relationCauses[key]]:[],actors:[a.id,b.id],intent:`${goalName(a.careerGoal)}；${goalName(b.careerGoal)}`,preconditions:["两人同队且都是首发",`关系值 ${oldRelation} ≤ -6`,`至少一人以竞争成绩为目标`,`该组合的摩擦事件尚未触发`],effects:[`${entityName(a.id)} 与 ${entityName(b.id)} 士气各下降 4`,`两人关系再下降 2`]});
+      }
+    }
+    function processMentorRules(state,step){
+      for(const group of GROUPS){
+        const starters=state.entities.filter(entity=>entity.group===group.id&&entity.lineup==="starter");
+        const mentors=starters.filter(entity=>entity.captain||entity.careerGoal==="mentor_teammates").sort((a,b)=>Number(b.captain)-Number(a.captain)||b.skill-a.skill||a.id.localeCompare(b.id));
+        for(const mentee of starters.filter(entity=>entity.mentorId===null&&["earn_starting_role","build_trust"].includes(entity.careerGoal)).sort((a,b)=>a.id.localeCompare(b.id))){
+          const mentor=mentors.find(candidate=>candidate.id!==mentee.id&&candidate.skill-mentee.skill>=8&&relationValue(state,candidate.id,mentee.id)>=20&&!state.triggered[`mentor:${mentee.id}`]);
+          if(!mentor)continue;
+          state.triggered[`mentor:${mentee.id}`]=true;mentee.mentorId=mentor.id;
+          const oldMenteeCollaboration=mentee.collaboration,oldMentorCollaboration=mentor.collaboration,oldMorale=mentee.morale;
+          mentee.collaboration=clamp(mentee.collaboration+2);mentor.collaboration=clamp(mentor.collaboration+1);mentee.morale=clamp(mentee.morale+3);
+          addDiff(state,step,mentee.id,"collaboration",oldMenteeCollaboration,mentee.collaboration,"R-09");addDiff(state,step,mentor.id,"collaboration",oldMentorCollaboration,mentor.collaboration,"R-09");addDiff(state,step,mentee.id,"morale",oldMorale,mentee.morale,"R-09");
+          const key=edgeKey(mentor.id,mentee.id);
+          addTrace(state,step,"R-09","队长主动带练队友",`${entityName(mentor.id)} 看见 ${entityName(mentee.id)} 想争取首发，主动带练；两人的默契提升，${entityName(mentee.id)} 士气回升。`,[`同队关系 ${relationValue(state,mentor.id,mentee.id)} ≥ 20，操作差距至少 8`,`目标：${goalName(mentee.careerGoal)}`,`${entityName(mentee.id)} 获得导师 ${entityName(mentor.id)} → 默契与士气改善`],{causeEventIds:state.relationCauses[key]?[state.relationCauses[key]]:[],actors:[mentor.id,mentee.id],intent:`${entityName(mentor.id)} 希望${goalName(mentor.careerGoal)}；${entityName(mentee.id)} 希望${goalName(mentee.careerGoal)}`,preconditions:["同队且都是首发","导师操作能力至少高 8 点","双方关系至少 20","学员尚未有导师"],effects:[`${entityName(mentee.id)} 的导师设为 ${entityName(mentor.id)}`,`${entityName(mentee.id)} 默契 +2、士气 +3`,`导师默契 +1`]});
+        }
+      }
+    }
+    function resolveReserveIntentions(state,step){
+      const candidates=state.entities.filter(entity=>entity.lineup==="reserve"&&entity.benchSince===step-1&&["earn_starting_role","seek_transfer"].includes(entity.careerGoal)&&entity.ambition>=55&&!entity.transferRequested).sort((a,b)=>b.ambition-a.ambition||a.id.localeCompare(b.id));
+      for(const reserve of candidates){
+        const destination=GROUPS.filter(group=>group.id!==reserve.group&&state.entities.filter(entity=>entity.group===group.id&&entity.lineup==="starter").length<STARTER_CAPACITY).map(group=>({group,score:groupScore(state,group.id)})).sort((a,b)=>a.score-b.score||a.group.id.localeCompare(b.group.id))[0]?.group;
+        if(!destination){
+          reserve.transferRequested=true;
+          const oldMorale=reserve.morale;reserve.morale=clamp(reserve.morale-8);
+          addDiff(state,step,reserve.id,"morale",oldMorale,reserve.morale,"R-07");
+          addTrace(state,step,"R-07","替补选手提出转会申请",`${entityName(reserve.id)} 的目标是${goalName(reserve.careerGoal)}，但其他战队都没有首发空位，于是提出转会申请。`,[`连续失去首发机会`,`其他战队暂时没有可用首发名额`,`转会受阻 → 士气下降 8，申请进入待处理状态`],{causeEventIds:reserve.benchEventId?[reserve.benchEventId]:[],actors:[reserve.id],intent:goalName(reserve.careerGoal),preconditions:["处于替补且有明确上场目标","所有其他战队首发已满","本赛季尚未提出转会申请"],effects:["记录待处理的转会申请",`${entityName(reserve.id)} 士气下降 8`]});
+          continue;
+        }
+        const oldGroup=reserve.group,oldLineup=reserve.lineup,benchEventId=reserve.benchEventId;
+        reserve.group=destination.id;reserve.lineup="starter";reserve.benchSince=null;reserve.benchEventId=null;reserve.transferRequested=false;
+        addDiff(state,step,reserve.id,"group",oldGroup,reserve.group,"R-06");addDiff(state,step,reserve.id,"lineup",oldLineup,reserve.lineup,"R-06");
+        const teammates=state.entities.filter(entity=>entity.group===destination.id&&entity.id!==reserve.id&&entity.lineup==="starter");
+        const partner=teammates.slice().sort((a,b)=>Number(b.captain)-Number(a.captain)||relationValue(state,reserve.id,b.id)-relationValue(state,reserve.id,a.id)||a.id.localeCompare(b.id))[0];
+        if(partner){
+          const key=edgeKey(reserve.id,partner.id),oldRelation=relationValue(state,reserve.id,partner.id),oldReserveCollaboration=reserve.collaboration,oldPartnerCollaboration=partner.collaboration,oldReserveMorale=reserve.morale;
+          setRelation(state,reserve.id,partner.id,oldRelation+8);reserve.collaboration=clamp(reserve.collaboration+2);partner.collaboration=clamp(partner.collaboration+2);reserve.morale=clamp(reserve.morale+6);
+          addDiff(state,step,key,"relation",oldRelation,relationValue(state,reserve.id,partner.id),"R-06");addDiff(state,step,reserve.id,"collaboration",oldReserveCollaboration,reserve.collaboration,"R-06");addDiff(state,step,partner.id,"collaboration",oldPartnerCollaboration,partner.collaboration,"R-06");addDiff(state,step,reserve.id,"morale",oldReserveMorale,reserve.morale,"R-06");
+          const eventId=addTrace(state,step,"R-06","替补选手为上场机会转会",`${entityName(reserve.id)} 为了${goalName(reserve.careerGoal)}转入 ${teamName(destination.id)}，并得到队长 ${entityName(partner.id)} 的支持。`,[`首发竞争使 ${entityName(reserve.id)} 暂列替补`,`${entityName(reserve.id)} 主动寻找有空位的战队`,`加入 ${teamName(destination.id)} → 与队长建立新关系，默契和士气回升`],{causeEventIds:benchEventId?[benchEventId]:[],actors:[reserve.id,partner.id],intent:goalName(reserve.careerGoal),preconditions:["处于替补且有明确上场目标",`${teamName(destination.id)} 有首发空位`,`该战队是当前可选队伍中战力最低的一支`],effects:[`${entityName(reserve.id)} 转入 ${teamName(destination.id)} 并成为首发`,`与队长关系 +8，双方默契 +2`,`${entityName(reserve.id)} 士气 +6`]});
+          state.relationCauses[key]=eventId;
+        }else{
+          addTrace(state,step,"R-06","替补选手转入新战队",`${entityName(reserve.id)} 转入 ${teamName(destination.id)}，获得新的首发机会。`,[`目标：${goalName(reserve.careerGoal)}`,`${teamName(destination.id)} 有首发空位`,`转会完成 → 阵容重新结算`],{causeEventIds:benchEventId?[benchEventId]:[],actors:[reserve.id],intent:goalName(reserve.careerGoal),preconditions:["处于替补且有明确上场目标",`${teamName(destination.id)} 有首发空位`],effects:[`${entityName(reserve.id)} 转入 ${teamName(destination.id)} 并成为首发`]});
+        }
+      }
+    }
+    function evolveOneStep(state){
+      const nextStep=state.step+1;
+      const scoreBefore=groupScores(state);
+      let totalSkillDelta=0;
+      state.entities.forEach(entity=>{
+        const oldSkill=entity.skill;
+        const potentialRoom=Math.max(0,entity.potential-entity.skill);
+        entity.skill=Number(clamp(entity.skill+Math.min(1.5,.5+potentialRoom*.02,potentialRoom)).toFixed(2));
+        totalSkillDelta+=entity.skill-oldSkill;
+        const peers=state.entities.filter(other=>other.group===entity.group&&other.id!==entity.id);
+        const meanRelation=peers.length?peers.reduce((sum,peer)=>sum+relationValue(state,entity.id,peer.id),0)/peers.length:0;
+        const collaborationGain=.2+Math.max(0,meanRelation)*.002;
+        entity.collaboration=Number(clamp(entity.collaboration+collaborationGain).toFixed(2));
+      });
+      addTrace(state,nextStep,"R-03","选手完成本季成长",`${state.entities.length} 名选手自然成长，操作能力合计提升 ${totalSkillDelta.toFixed(2)}；任何人都不会超过自己的成长上限。`,["潜力越高，成长空间越大","同队关系越好，默契成长越快"]);
+      processBondRules(state,nextStep);
+      processRivalryRules(state,nextStep);
+      processMentorRules(state,nextStep);
+      resolveReserveIntentions(state,nextStep);      state.step=nextStep;
+      const scoreAfter=groupScores(state);
+      const snapshots=GROUPS.map(group=>({id:group.id,score:scoreAfter[group.id],delta:Number((scoreAfter[group.id]-scoreBefore[group.id]).toFixed(2))}));
+      state.periods.push({step:nextStep,totalSkillDelta:Number(totalSkillDelta.toFixed(2)),scores:snapshots});
+      addTrace(state,nextStep,"R-02","本季战队战力结算",`第 ${nextStep} 个赛季结束，按选手状态和队友默契更新各队战力。`,snapshots.map(item=>`${teamName(item.id)}：${item.score}（${item.delta>=0?"+":""}${item.delta}）`));
+    }
+    function runCore(config,knowledge=[]){
+      const state=worldBase(knowledge);
+      applyIntervention(state,config);
+      for(let step=0;step<config.horizon;step++)evolveOneStep(state);
+      return state;
+    }
+    function runCampaign(actions,horizon=MAX_STEPS,knowledge=[]){
+      const state=worldBase(knowledge);
+      for(let season=0;season<horizon;season++){
+        const action=actions[season]||{action:"none",entity:"A",group:"G2",attribute:"skill",amount:0,partner:"B"};
+        applyIntervention(state,action);
+        evolveOneStep(state);
+      }
+      return state;
+    }
+    function seededRandom(seed){
+      let value=seed>>>0;
+      return ()=>{value=(value+0x6D2B79F5)|0;let mixed=Math.imul(value^value>>>15,1|value);mixed^=mixed+Math.imul(mixed^mixed>>>7,61|mixed);return ((mixed^mixed>>>14)>>>0)/4294967296;};
+    }
+    function campaignChoice(random,state){
+      const roll=random(),target=state.entities[Math.floor(random()*state.entities.length)];
+      if(roll<.2){
+        const destinations=GROUPS.filter(group=>group.id!==target.group);
+        return {action:"move",entity:target.id,group:destinations[Math.floor(random()*destinations.length)].id,attribute:"skill",amount:0,partner:"B"};
+      }
+      if(roll<.4)return {action:"train",entity:target.id,group:target.group,attribute:["skill","collaboration","discipline"][Math.floor(random()*3)],amount:[2,5,10][Math.floor(random()*3)],partner:"B"};
+      if(roll<.65){
+        const partners=state.entities.filter(entity=>entity.id!==target.id),partner=partners[Math.floor(random()*partners.length)];
+        return {action:"relation",entity:target.id,group:target.group,attribute:"skill",amount:[-30,-18,15,28,45][Math.floor(random()*5)],partner:partner.id};
+      }
+      if(roll<.77)return {action:"chain",entity:"C",group:"G1",attribute:"skill",amount:0,partner:"B"};
+      return {action:"none",entity:target.id,group:target.group,attribute:"skill",amount:0,partner:"B"};
+    }
+    function simulateSeededCampaign(seed,horizon=MAX_STEPS){
+      const random=seededRandom(seed),state=worldBase([]),actions=[];
+      for(let season=0;season<horizon;season++){
+        const action=campaignChoice(random,state);actions.push(action);applyIntervention(state,action);evolveOneStep(state);
+      }
+      return {state,actions};
+    }
+    function storyOutcomeSignature(state){
+      const people=state.entities.map(entity=>[entity.id,entity.group,entity.lineup,entity.skill,entity.collaboration,entity.morale,entity.mentorId,entity.transferRequested]);
+      return JSON.stringify({people,relations:state.relations,triggered:state.triggered});
+    }
+    function runRuleFixtures(){
+      const results=[];
+      const record=(name,passed,detail,rules=[],metrics={})=>results.push({name,passed:Boolean(passed),detail,rules,...metrics});
+      const bond=worldBase([]),bondKey=edgeKey("A","B"),bondBefore=relationValue(bond,"A","B");
+      setRelation(bond,"A","B",45);const bondCause=addTrace(bond,0,"R-01","双排安排","林澈与苏遥完成双排。",[],{actors:["A","B"],intent:"建立默契",preconditions:["安排双排"],effects:["关系提升"]});bond.relationCauses[bondKey]=bondCause;processBondRules(bond,1);
+      record("关系达到门槛后形成固定搭档",bond.triggered[`bond:${bondKey}`]===true&&auditStoryEvents(bond).failures.length===0,`原关系 ${bondBefore}，新关系 ${relationValue(bond,"A","B")}`,["R-04"]);
+      const bondNegative=worldBase([]);processBondRules(bondNegative,1);
+      record("关系未到门槛时不提前形成搭档",!bondNegative.triggered[`bond:${bondKey}`],`关系 ${relationValue(bondNegative,"A","B")}`);
+      const rivalry=worldBase([]),rivalryKey=edgeKey("B","N06");setRelation(rivalry,"B","N06",-8);
+      const rivalryCause=addTrace(rivalry,0,"R-01","首发竞争开始","两人争夺首发。",[],{actors:["B","N06"],intent:"争取成绩",preconditions:["同队"],effects:["关系恶化"]});rivalry.relationCauses[rivalryKey]=rivalryCause;processRivalryRules(rivalry,1);
+      record("负面关系和竞争目标引发队内摩擦",rivalry.triggered[`rivalry:${rivalryKey}`]===true&&auditStoryEvents(rivalry).failures.length===0,`触发人数 ${rivalry.trace.filter(event=>event.rule==="R-08").length}`,["R-08"]);
+      const rivalryNegative=worldBase([]);setRelation(rivalryNegative,"B","N06",-5);processRivalryRules(rivalryNegative,1);
+      record("摩擦门槛未满足时不触发",!rivalryNegative.triggered[`rivalry:${rivalryKey}`],`关系 ${relationValue(rivalryNegative,"B","N06")}`);
+      const mentoring=worldBase([]);processMentorRules(mentoring,1);
+      record("队长满足条件时带练队友",getEntity(mentoring,"A").mentorId==="B"&&auditStoryEvents(mentoring).failures.length===0,`林澈导师：${getEntity(mentoring,"A").mentorId||"无"}`,["R-09"]);
+      const mentoringNegative=worldBase([]);setRelation(mentoringNegative,"A","B",19);processMentorRules(mentoringNegative,1);
+      record("关系不足时不建立导师关系",getEntity(mentoringNegative,"A").mentorId===null,`关系 ${relationValue(mentoringNegative,"A","B")}`);
+      const cappedTraining=runCore({action:"train",entity:"A",group:"G1",attribute:"skill",amount:100,partner:"B",horizon:0});
+      record("集中训练不会超过个人成长上限",getEntity(cappedTraining,"A").skill===getEntity(cappedTraining,"A").potential&&validateWorldState(cappedTraining).length===0,`操作 ${getEntity(cappedTraining,"A").skill} / 上限 ${getEntity(cappedTraining,"A").potential}`);
+      const chain=runCore({action:"chain",entity:"C",group:"G1",attribute:"skill",amount:0,partner:"B",horizon:1});
+      record("签约、替补和主动转会形成连续剧情",["R-05","R-06"].every(rule=>chain.trace.some(event=>event.rule===rule))&&auditStoryEvents(chain).failures.length===0,`因果链深度 ${auditStoryEvents(chain).maxDepth}`,["R-05","R-06"],{causeDepth:auditStoryEvents(chain).maxDepth});
+      const blocked=worldBase([]),reserve=getEntity(blocked,"A");reserve.lineup="reserve";reserve.benchSince=0;reserve.careerGoal="earn_starting_role";reserve.ambition=86;reserve.benchEventId=addTrace(blocked,0,"R-05","林澈暂列替补","阵容竞争导致林澈暂列替补。",[],{actors:["A"],intent:"争取首发",preconditions:["首发名额已满"],effects:["林澈暂列替补"]});
+      const reserveSpot=getEntity(blocked,"N15");reserveSpot.lineup="starter";resolveReserveIntentions(blocked,1);
+      record("所有战队首发已满时记录转会受阻",reserve.transferRequested&&reserve.morale===58&&blocked.trace.some(event=>event.rule==="R-07")&&auditStoryEvents(blocked).failures.length===0,`士气 ${reserve.morale}，申请 ${reserve.transferRequested?"已记录":"未记录"}`,["R-07"]);
+      return results;
+    }
+    async function runBatchValidation(sampleCount=1000,onProgress=()=>{}){
+      const started=performance.now(),outcomes=new Set(),ruleCounts=Object.fromEntries(["R-04","R-05","R-06","R-07","R-08","R-09"].map(rule=>[rule,0]));
+      let invariantFailures=0,causalFailures=0,storyEventCount=0,causalEventCount=0,maxCauseDepth=0,replayed=0,replayFailures=0,paired=0,counterfactualChanges=0;
+      for(let index=0;index<sampleCount;index++){
+        const seed=4107+index*7919,{state,actions}=simulateSeededCampaign(seed);
+        outcomes.add(storyOutcomeSignature(state));
+        if(validateWorldState(state).length)invariantFailures++;
+        const audit=auditStoryEvents(state);if(audit.failures.length)causalFailures++;
+        storyEventCount+=audit.events.length;causalEventCount+=audit.causalEvents.length;maxCauseDepth=Math.max(maxCauseDepth,audit.maxDepth);
+        for(const event of audit.events)ruleCounts[event.rule]++;
+        if(index<64){const replay=runCampaign(actions,MAX_STEPS);replayed++;if(signature(state)!==signature(replay))replayFailures++;}
+        if(index<128){
+          const altered=actions.map(action=>({...action})),mutateAt=(seed>>>5)%altered.length;
+          altered[mutateAt]={action:"none",entity:altered[mutateAt].entity,group:altered[mutateAt].group,attribute:"skill",amount:0,partner:"B"};
+          const counterfactual=runCampaign(altered,MAX_STEPS);paired++;
+          if(storyOutcomeSignature(state)!==storyOutcomeSignature(counterfactual))counterfactualChanges++;
+        }
+        if(index%25===24){onProgress(index+1,sampleCount);await new Promise(resolve=>setTimeout(resolve,0));}
+      }
+      const fixtures=runRuleFixtures();
+      const fixtureRules=new Set(fixtures.filter(item=>item.passed).flatMap(item=>item.rules));
+      const ruleCoverage=new Set([...Object.entries(ruleCounts).filter(([,count])=>count>0).map(([rule])=>rule),...fixtureRules]);
+      const allRulesCovered=ruleCoverage.size>=6;
+      const fixtureMaxCauseDepth=Math.max(0,...fixtures.map(item=>item.causeDepth||0));maxCauseDepth=Math.max(maxCauseDepth,fixtureMaxCauseDepth);
+      const allGreen=invariantFailures===0&&causalFailures===0&&replayFailures===0&&replayed===Math.min(64,sampleCount)&&counterfactualChanges>=Math.ceil(paired/2)&&fixtures.every(item=>item.passed)&&allRulesCovered&&outcomes.size>=Math.min(100,sampleCount)&&maxCauseDepth>=3;
+      return {sampleCount,uniqueOutcomes:outcomes.size,invariantFailures,causalFailures,storyEventCount,causalEventCount,maxCauseDepth,replayed,replayFailures,paired,counterfactualChanges,ruleCounts,ruleCoverage:ruleCoverage.size,coveredRules:[...ruleCoverage],fixtures,allGreen,elapsedMs:Number((performance.now()-started).toFixed(1)),allRulesCovered};
+    }
+    function validateWorldState(state){
+      const failures=[];
+      if(state.entities.length!==50||new Set(state.entities.map(entity=>entity.id)).size!==50)failures.push("50名选手状态不完整或编号重复");
+      if(!state.entities.every(entity=>GROUPS.some(group=>group.id===entity.group)))failures.push("存在选手没有有效战队");
+      if(!state.entities.every(entity=>[entity.skill,entity.collaboration,entity.discipline,entity.morale,entity.ambition,entity.loyalty].every(value=>value>=0&&value<=100)&&entity.skill<=entity.potential))failures.push("选手属性越界或超过成长上限");
+      if(!state.entities.every(entity=>["starter","reserve"].includes(entity.lineup)))failures.push("存在无效阵容位置");
+      if(state.entities.some(entity=>state.entities.filter(other=>other.group===entity.group&&other.lineup==="starter").length>STARTER_CAPACITY))failures.push("战队首发人数超过上限");
+      const expectedEdges=state.entities.length*(state.entities.length-1)/2,keys=Object.keys(state.relations);
+      if(keys.length!==expectedEdges||keys.some(key=>{const [a,b]=key.split("|");return edgeKey(a,b)!==key||!state.entities.some(entity=>entity.id===a)||!state.entities.some(entity=>entity.id===b)||state.relations[key]<-100||state.relations[key]>100;}))failures.push("选手关系图不完整或关系值越界");
+      if(state.entities.some(entity=>entity.mentorId!==null&&(!getEntity(state,entity.mentorId)||entity.mentorId===entity.id)))failures.push("导师关系指向无效选手");
+      return failures;
+    }
+    function auditStoryEvents(state){
+      const storyRules=new Set(["R-04","R-05","R-06","R-07","R-08","R-09"]),events=state.trace.filter(event=>storyRules.has(event.rule)),allIds=new Set(state.trace.map(event=>event.id)),failures=[];
+      if(allIds.size!==state.trace.length)failures.push("剧情事件编号重复");
+      for(const event of events){
+        if(!Array.isArray(event.actors)||event.actors.some(id=>!getEntity(state,id)))failures.push(`${event.rule} 参与人物无效`);
+        if(!event.intent||!event.preconditions?.length||!event.effects?.length)failures.push(`${event.rule} 缺少人物动机、前提或结果`);
+        if((event.causeEventIds||[]).some(id=>!allIds.has(id)||Number(id.slice(2))>=Number(event.id.slice(2))))failures.push(`${event.rule} 因果来源不存在或时间倒置`);
+      }
+      const eventById=new Map(state.trace.map(event=>[event.id,event]));
+      const depthOf=(id,seen=new Set())=>{
+        if(seen.has(id))return 0;
+        const event=eventById.get(id);if(!event)return 0;
+        const next=new Set(seen);next.add(id);
+        return 1+Math.max(0,...(event.causeEventIds||[]).map(parent=>depthOf(parent,next)));
+      };
+      const causalEvents=events.filter(event=>event.causeEventIds?.length);
+      return {events,failures,causalEvents,maxDepth:Math.max(0,...events.map(event=>depthOf(event.id)))};
+    }
+    function signature(state){
+      const payload={seed:SEED,step:state.step,entities:state.entities,relations:state.relations,trace:state.trace,periods:state.periods,diffs:state.diffs};
+      let hash=2166136261;
+      for(const char of JSON.stringify(payload)){hash^=char.charCodeAt(0);hash=Math.imul(hash,16777619);}
+      return (hash>>>0).toString(16).toUpperCase().padStart(8,"0");
+    }
+    function check(id,name,expected,observed,passed,detail=""){
+      return {id,name,expected:String(expected),observed:String(observed),passed:Boolean(passed),detail};
+    }
+    function createAssertions(config,actual,replay,baseline){
+      const checks=[];
+      const targetBefore=getEntity(baseline,config.entity);
+      const immediate=runCore({...config,horizon:0},baseline.knowledge);
+      const targetImmediate=getEntity(immediate,config.entity);
+      const direct=immediate.trace.find(item=>item.step===0&&item.rule==="R-01");
+      const directState=direct!==undefined;
+      if(config.action==="move"){
+        checks.push(check("A01",`${entityName(config.entity)} 完成转会`,teamName(config.group),teamName(targetImmediate.group),targetImmediate.group===config.group));
+        const oldScoreBefore=groupScore(baseline,targetBefore.group),oldScoreAfter=groupScore(immediate,targetBefore.group);
+        const newScoreBefore=groupScore(baseline,config.group),newScoreAfter=groupScore(immediate,config.group);
+        checks.push(check("A02",`${teamName(targetBefore.group)}战力下降`,`低于 ${oldScoreBefore}`,oldScoreAfter,oldScoreAfter<oldScoreBefore,"选手离队后原队阵容战力重新结算"));
+        checks.push(check("A03",`${teamName(config.group)}战力上升`,`高于 ${newScoreBefore}`,newScoreAfter,newScoreAfter>newScoreBefore,"新选手加入后新队阵容战力重新结算"));
+      }else if(config.action==="chain"){
+        const signed=getEntity(immediate,"C"),benched=getEntity(immediate,"A"),moved=getEntity(actual,"A"),partner=getEntity(actual,"E");
+        checks.push(check("A01","周屿签入星火战队",teamName("G1"),teamName(signed.group),signed.group==="G1"));
+        checks.push(check("A02","林澈因首发竞争暂列替补","替补",benched.lineup==="reserve"?"替补":"首发",benched.lineup==="reserve"&&benched.benchSince===0,"签约后星火首发不超过 5 人"));
+        const immediateCapacity=immediate.entities.every(entity=>immediate.entities.filter(other=>other.group===entity.group&&other.lineup==="starter").length<=STARTER_CAPACITY);
+        checks.push(check("A03","签约后各队首发没有超额",`最多 ${STARTER_CAPACITY} 名首发`,immediateCapacity?"符合":"超出上限",immediateCapacity));
+        checks.push(check("A04","林澈首个赛季转入赤曜战队",teamName("G3"),teamName(moved.group),moved.group==="G3"&&moved.lineup==="starter"));
+        const relationDiff=actual.diffs.find(item=>item.source==="R-06"&&item.field==="relation");
+        checks.push(check("A05","顾临与新队友关系提升","+8",relationDiff?`+${relationDiff.after-relationDiff.before}`:"没有变化",Boolean(relationDiff&&relationDiff.after-relationDiff.before===8)&&partner.group===moved.group));
+        const collaborationDiffs=actual.diffs.filter(item=>item.source==="R-06"&&item.field==="collaboration");
+        checks.push(check("A06","双方团队默契各提升 2","林澈 +2、顾临 +2",collaborationDiffs.length===2&&collaborationDiffs.every(item=>item.after-item.before===2)?"林澈 +2、顾临 +2":"未按预期提升",collaborationDiffs.length===2&&collaborationDiffs.every(item=>item.after-item.before===2)));
+        const tracePresent=actual.trace.some(item=>item.rule==="R-06"&&item.actors?.includes("A")&&item.actors?.includes("E"));
+        checks.push(check("A07","转会后触发新队友连锁","出现转会连锁记录",tracePresent?"已触发":"未触发",tracePresent));
+        const rosterValid=actual.entities.every(entity=>actual.entities.filter(other=>other.group===entity.group&&other.lineup==="starter").length<=STARTER_CAPACITY);
+        checks.push(check("A08","每支战队首发不超过 5 人",`最多 ${STARTER_CAPACITY} 名首发`,rosterValid?"符合":"超出上限",rosterValid));
+      }else if(config.action==="train"){
+        const expectedValue=config.attribute==="skill"?clamp(targetBefore[config.attribute]+config.amount,0,targetBefore.potential):clamp(targetBefore[config.attribute]+config.amount);
+        checks.push(check("A01",`${entityName(config.entity)}的${attributeName(config.attribute)}提升`,expectedValue,targetImmediate[config.attribute],targetImmediate[config.attribute]===expectedValue,"训练增量受属性范围限制"));
+        const beforeScore=groupScore(baseline,targetBefore.group),afterScore=groupScore(immediate,targetBefore.group);
+        checks.push(check("A02",`${teamName(targetBefore.group)}战力随训练提升`,`高于 ${beforeScore}`,afterScore,afterScore>beforeScore,"选手个人提升会计入队伍实力"));
+      }else if(config.action==="relation"){
+        const before=relationValue(baseline,config.entity,config.partner),expectedValue=clamp(before+config.amount,-100,100),after=relationValue(actual,config.entity,config.partner);
+        checks.push(check("A01",`${entityName(config.entity)}与${entityName(config.partner)}关系提升`,expectedValue,after,after===expectedValue));
+        const [a,b]=edgeKey(config.entity,config.partner).split("|");
+        const symmetric=relationValue(actual,a,b)===relationValue(actual,b,a);
+        checks.push(check("A02","双排关系对双方一致","一致",symmetric?"一致":"不一致",symmetric,"关系记录对两名选手双向生效"));
+        const shouldTrigger=before<40&&expectedValue>=40;
+        const didTrigger=actual.trace.some(item=>item.rule==="R-04"&&item.description.includes(`${entityName(a)} 与 ${entityName(b)}`));
+        checks.push(check("A03","达到默契门槛后出现搭档事件",shouldTrigger?"出现搭档事件":"不出现搭档事件",didTrigger?"出现搭档事件":"未出现搭档事件",shouldTrigger===didTrigger));
+        const pairEvents=actual.trace.filter(item=>item.rule==="R-04"&&item.description.includes(`${entityName(a)} 与 ${entityName(b)}`)).length;
+        checks.push(check("A04","同一组合的搭档事件只触发一次","1 次或 0 次",`${pairEvents} 次`,pairEvents===(shouldTrigger?1:0)));
+      }else{
+        checks.push(check("A01","观察赛季没有赛前状态变化","没有直接调整",directState?"发生直接调整":"没有直接调整",!directState,"只观察选手自然成长和比赛结果"));
+      }
+      const membershipValid=actual.entities.every(entity=>GROUPS.some(group=>group.id===entity.group));
+      checks.push(check("I01","每位选手都在登记的战队","符合",membershipValid?"符合":"不符合",membershipValid));
+      const boundsValid=actual.entities.every(entity=>[entity.skill,entity.collaboration,entity.discipline].every(value=>value>=0&&value<=100)&&entity.skill<=entity.potential);
+      checks.push(check("I02","选手属性没有超出成长上限","操作、默契与训练稳定均在 0–100 内；操作不超成长上限",boundsValid?"符合":"超出范围",boundsValid));
+      const populationValid=actual.entities.length===50&&new Set(actual.entities.map(entity=>entity.id)).size===50;
+      checks.push(check("I03","50 名选手都能保留独立状态","50 名且编号不重复",populationValid?"符合":"人数或编号异常",populationValid));
+      const expectedEdges=actual.entities.length*(actual.entities.length-1)/2;
+      const relationKeys=Object.keys(actual.relations),relationCoverage=relationKeys.length===expectedEdges&&relationKeys.every(key=>{const [a,b]=key.split("|");return actual.entities.some(entity=>entity.id===a)&&actual.entities.some(entity=>entity.id===b)&&a!==b&&edgeKey(a,b)===key;});
+      checks.push(check("I04","50 名选手之间的关系均可记录",`${expectedEdges} 组关系`,`${relationKeys.length} 组关系`,relationCoverage));
+      const capacityValid=actual.entities.every(entity=>actual.entities.filter(other=>other.group===entity.group&&other.lineup==="starter").length<=STARTER_CAPACITY);
+      checks.push(check("I05","全体战队首发人数不超过上限",`每队最多 ${STARTER_CAPACITY} 人`,capacityValid?"符合":"超出上限",capacityValid));
+      const lineupValid=actual.entities.every(entity=>entity.lineup==="starter"||entity.lineup==="reserve");
+      checks.push(check("I06","所有选手都有有效阵容位置","首发或替补",lineupValid?"符合":"状态异常",lineupValid));
+      const stateFailures=validateWorldState(actual);
+      checks.push(check("I07","人物、关系、成长上限和阵容完整","全部满足",stateFailures.length?stateFailures.join("；"):"全部满足",stateFailures.length===0));
+      const storyAudit=auditStoryEvents(actual);
+      checks.push(check("I08","剧情记录都有有效人物、动机和因果来源","记录完整",storyAudit.failures.length?storyAudit.failures.join("；"):"记录完整",storyAudit.failures.length===0));
+      checks.push(check("T01","赛季推进期数符合选择",`${config.horizon} 个赛季`,`${actual.step} 个赛季`,actual.step===config.horizon));
+      const actualSignature=signature(actual),replaySignature=signature(replay);
+      checks.push(check("D01","重复相同选择得到同一赛果编号",actualSignature,replaySignature,actualSignature===replaySignature,"同一赛季初状态与相同选择重新模拟"));
+      return checks;
+    }
+    function readConfig(){
+      syncDynamicOptions();
+      return {action:$("actionSelect").value,entity:$("entitySelect").value,group:$("groupSelect").value,attribute:$("attributeSelect").value,amount:Number($("deltaSelect").value),partner:$("partnerSelect").value,horizon:Number($("horizonSelect").value)};
+    }
+    function renderExpected(){
+      syncDynamicOptions();
+      const config=readConfig();
+      const person=entityName(config.entity),partner=entityName(config.partner),group=teamName(config.group);
+      const from=teamName(BASE_ENTITIES.find(entity=>entity.id===config.entity)?.group);
+      const repeated=["重复赛果",`${config.horizon} 个赛季后，相同选择应得到相同结果编号`,"重复模拟"];
+      const rowsByAction={
+        chain:[["签入周屿","周屿从零度战队转入星火战队","签约结果"],["首发竞争",`星火已有 ${STARTER_CAPACITY} 名首发；林澈暂列替补`,"阵容上限"],["首个赛季转会","林澈转入赤曜战队，成为顾临的新队友","转会连锁"],["关系与默契",`两人关系 +8，团队默契各 +2；每队首发最多 ${STARTER_CAPACITY} 人`,"赛后核对"]],
+        move:[["签约结果",`${person} 从 ${from} 转入 ${group}`,"阵容变化"],["战队战力",`${from} 战力下降，${group} 战力上升`,"赛季结算"],["成长规则","每位选手只属于一支战队，属性不超过成长上限","状态检查"],repeated],
+        train:[["训练结果",`${person} 的${attributeName(config.attribute)}提升 ${config.amount}（不超过上限）`,"训练效果"],["战队战力",`${teamName(BASE_ENTITIES.find(entity=>entity.id===config.entity)?.group)} 战力随个人提升重新结算`,"阵容结算"],["成长规则","选手属性保持在合理范围内","状态检查"],repeated],
+        relation:[["双排结果",`${person} 与 ${partner} 的关系提升 ${config.amount}`,"关系变化"],["默契事件","关系达到 40 后，两人触发固定搭档事件","搭档形成"],["成长规则","关系双向一致，选手属性不超过上限","状态检查"],repeated],
+        none:[["赛前状态","不签约、不训练、不安排双排","没有直接调整"],["赛季发展","选手按既定成长规则发展，战队正常结算","自然演化"],["成长规则","选手仍属于有效战队，属性不超过成长上限","状态检查"],repeated]
+      };
+      const rows=rowsByAction[config.action]||rowsByAction.none;
+      $("expectedList").innerHTML=rows.map((row,index)=>`<div class="expected-row"><span class="expected-index">0${index+1}</span><span class="expected-text"><b>${row[0]}</b><br>${row[1]}</span><span class="expected-rule">${row[2]}</span></div>`).join("");
+      $("expectedMode").textContent=`${rows.length} 项预期赛果`;
+      $("groupField").hidden=config.action!=="move"&&config.action!=="chain";
+      $("attributeField").hidden=config.action!=="train";
+      $("deltaField").hidden=config.action!=="train";
+      $("partnerField").hidden=config.action!=="relation";
+    }
+    function syncDynamicOptions(){
+      const action=$("actionSelect").value;
+      const entitySelect=$("entitySelect"),oldEntity=action==="chain"?"C":entitySelect.value;
+      entitySelect.innerHTML=BASE_ENTITIES.map(entity=>`<option value="${entity.id}">${entityName(entity.id)} · ${teamName(entity.group)}</option>`).join("");
+      if(BASE_ENTITIES.some(entity=>entity.id===oldEntity))entitySelect.value=oldEntity;
+      entitySelect.disabled=action==="chain";
+      const target=BASE_ENTITIES.find(entity=>entity.id===entitySelect.value)||BASE_ENTITIES[0];
+      const groupSelect=$("groupSelect"),groupOptions=GROUPS.filter(group=>group.id!==target.group);
+      groupSelect.innerHTML=groupOptions.map(group=>`<option value="${group.id}">${teamName(group.id)} · 当前 ${BASE_ENTITIES.filter(entity=>entity.group===group.id).length} 人</option>`).join("");
+      if(groupOptions.length&&!groupOptions.some(group=>group.id===groupSelect.value))groupSelect.value=groupOptions[0].id;
+      if(action==="chain")groupSelect.value="G1";
+      const partnerSelect=$("partnerSelect");
+      partnerSelect.innerHTML=BASE_ENTITIES.filter(entity=>entity.id!==target.id).map(entity=>`<option value="${entity.id}">${entityName(entity.id)} · 关系 ${BASE_RELATIONS[edgeKey(target.id,entity.id)]??0}</option>`).join("");
+      if(!BASE_ENTITIES.some(entity=>entity.id===partnerSelect.value&&entity.id!==target.id))partnerSelect.value=BASE_ENTITIES.find(entity=>entity.id!==target.id).id;
+      $("groupSelect").disabled=action!=="move";
+      $("attributeSelect").disabled=action!=="train";
+      $("deltaSelect").disabled=action==="none";
+      $("partnerSelect").disabled=action!=="relation";
+    }
+    function renderAssertions(){
+      const wrap=$("assertionWrap");
+      if(!latestAssertions.length){wrap.innerHTML=`<div class="empty">完成一次赛季模拟后，显示检查结果。</div>`;return;}
+      wrap.innerHTML=`<table class="assertions"><thead><tr><th>检查内容</th><th>预期赛果</th><th>实际观察</th><th>是否符合</th></tr></thead><tbody>${latestAssertions.map(item=>`<tr><td>${item.name}${item.detail?`<span class="assertion-detail">${item.detail}</span>`:""}</td><td>${item.expected}</td><td>${item.observed}</td><td><span class="verdict ${item.passed?"pass":"fail"}">${item.passed?"符合":"不符合"}</span></td></tr>`).join("")}</tbody></table>`;
+    }
+    function renderBatchResult(result){
+      const rows=[
+        ["世界约束检查",`${result.sampleCount} / ${result.sampleCount} 条通过`,`${result.invariantFailures} 条发现状态问题`,result.invariantFailures===0],
+        ["剧情记录检查","人物、动机、前提和结果完整；已写入的前因引用有效",`${result.causalFailures} 条路线发现记录问题`,result.causalFailures===0],
+        ["相同路线重跑","64 / 64 次得到相同结果",`${result.replayed-result.replayFailures} / ${result.replayed} 次一致`,result.replayFailures===0],
+        ["替换一个决定","至少一半配对路线发生变化",`${result.counterfactualChanges} / ${result.paired} 组发生变化`,result.counterfactualChanges>=Math.ceil(result.paired/2)],
+        ["不同故事走向","至少 100 种人物与关系结局",`${result.uniqueOutcomes} 种`,result.uniqueOutcomes>=100],
+        ["故事规则覆盖","6 / 6 种剧情规则可触发",`${result.ruleCoverage} / 6 种`,result.allRulesCovered],
+        ["因果链深度","至少能串起 3 段事件",`最长 ${result.maxCauseDepth} 段；${result.causalEventCount} 条剧情带有前因`,result.maxCauseDepth>=3],
+        ["五十人状态压力","每条路线保留 50 人和完整关系",`${result.sampleCount} 条已完成`,result.invariantFailures===0]
+      ];
+      $("batchResult").className="";
+      $("batchResult").innerHTML=`<div class="knowledge" style="margin-top:11px"><strong>${result.allGreen?"检验通过":"检验未通过"}</strong><span>${result.sampleCount} 条路线，共 ${result.sampleCount*MAX_STEPS} 个赛季；出现 ${result.storyEventCount} 条人物剧情记录。用时 ${result.elapsedMs} 毫秒。</span></div><table class="batch-table"><thead><tr><th>检查内容</th><th>预期</th><th>观察结果</th><th>结果</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${row[0]}</td><td>${row[1]}</td><td>${row[2]}</td><td><span class="verdict ${row[3]?"pass":"fail"}">${row[3]?"符合":"不符合"}</span></td></tr>`).join("")}</tbody></table>`;
+      const ruleNames={"R-04":"默契搭档","R-05":"首发竞争","R-06":"主动转会","R-07":"转会受阻","R-08":"队内摩擦","R-09":"队友带练"};
+      $("batchChecks").innerHTML=`<table class="batch-table"><thead><tr><th>人物发展规则</th><th>随机路线触发次数</th><th>检查结果</th></tr></thead><tbody>${Object.entries(ruleNames).map(([rule,name])=>{const covered=result.coveredRules.includes(rule);return `<tr><td>${name}</td><td>${result.ruleCounts[rule]} 次${result.ruleCounts[rule]===0?"（由固定边界场景验证）":""}</td><td><span class="verdict ${covered?"pass":"fail"}">${covered?"已覆盖":"未覆盖"}</span></td></tr>`;}).join("")}</tbody></table><div class="batch-fixtures">${result.fixtures.map(item=>`<div class="batch-fixture"><span>${item.name}<small> · ${item.detail}</small></span><span class="verdict ${item.passed?"pass":"fail"}">${item.passed?"符合":"不符合"}</span></div>`).join("")}</div>`;
+      $("batchDetails").hidden=false;
+    }
+    async function startBatchValidation(){
+      const button=$("runBatchButton");button.disabled=true;button.textContent="正在模拟 1000 条路线…";
+      $("batchStatus").textContent="逐批推进赛季并检查人物状态、剧情事件和选择带来的后续变化。";
+      $("batchProgress").style.width="0%";$("batchDetails").hidden=true;
+      try{
+        const result=await runBatchValidation(1000,(completed,total)=>{$("batchProgress").style.width=`${(completed/total*100).toFixed(1)}%`;$("batchStatus").textContent=`已完成 ${completed} / ${total} 条发展路线…`;});
+        renderBatchResult(result);$("batchProgress").style.width="100%";
+        $("batchStatus").textContent=result.allGreen?"所有自动检查符合预期。":"有检查项不符合预期，展开记录查看具体场景。";
+        return result;
+      }catch(error){
+        $("batchStatus").textContent=`自动检验出错：${String(error?.message||error)}`;
+      }finally{button.disabled=false;button.textContent="再跑 1000 条发展路线";}
+    }
+    function visibleRule(rule){return {"R-01":"赛前安排","R-02":"战队战力","R-03":"选手成长","R-04":"默契事件","R-05":"首发竞争","R-06":"转会连锁","R-07":"转会受阻","R-08":"队内摩擦","R-09":"队友带练","BASELINE":"自然赛季"}[rule]||rule;}
+    function renderTrace(){
+      $("traceCount").textContent=`${world.trace.length} 条记录`;
+      $("causalList").innerHTML=world.trace.length?world.trace.slice().reverse().map(item=>`<article class="causal-item"><div class="step-tag">${item.step===0?"赛前":`第 ${item.step} 季`}<br>${visibleRule(item.rule)}</div><div><div class="causal-title">${item.title}</div><div class="causal-desc">${item.description}</div><div class="chain">${item.chain.join(" → ")}</div></div></article>`).join(""):`<div class="empty">完成赛季模拟后，会显示决定如何传导到其他选手和战队。</div>`;
+    }
+    function renderState(){
+      const changed=new Set(world.diffs.map(item=>`${item.entity}.${item.field}`));
+      $("entityRows").innerHTML=world.entities.map(entity=>`<tr><td class="entity-id">${entityName(entity.id)}</td><td>${teamName(entity.group)}</td><td>${entity.lineup==="reserve"?"替补":"首发"}</td><td>${goalName(entity.careerGoal)}</td><td class="${changed.has(`${entity.id}.morale`)?"changed":""}">${entity.morale}</td><td>${entity.mentorId?entityName(entity.mentorId):"—"}</td><td class="${changed.has(`${entity.id}.skill`)?"changed":""}">${entity.skill.toFixed(2)}</td><td class="${changed.has(`${entity.id}.collaboration`)?"changed":""}">${entity.collaboration.toFixed(2)}</td><td class="${changed.has(`${entity.id}.discipline`)?"changed":""}">${entity.discipline.toFixed(2)}</td><td>${entity.potential}</td></tr>`).join("");
+      $("groupCards").innerHTML=GROUPS.map(group=>`<div class="group-chip"><b>${teamName(group.id)} · 战力 ${groupScore(world,group.id).toFixed(2)}</b><span>${world.entities.filter(entity=>entity.group===group.id).length} 名选手</span></div>`).join("");
+      const allRelations=Object.entries(world.relations).sort((a,b)=>a[0].localeCompare(b[0]));
+      const changedRelations=new Set(world.diffs.filter(item=>item.field==="relation").map(item=>item.entity));
+      const focusIds=new Set([latestAction?.entity||$("entitySelect").value].filter(Boolean));
+      if(latestAction?.action==="relation"&&latestAction.partner)focusIds.add(latestAction.partner);
+      const focusedRelations=allRelations.filter(([key])=>focusIds.has(key.split("|")[0])||focusIds.has(key.split("|")[1])||changedRelations.has(key));
+      const shownRelations=allRelations.length>200?focusedRelations:allRelations;
+      $("edgeMode").textContent=allRelations.length>200?`显示 ${shownRelations.length} / ${allRelations.length} 组：相关选手与本轮变化`:`${allRelations.length} 组双向关系`;
+      $("edgeRows").innerHTML=shownRelations.map(([key,value])=>{const [first,second]=key.split("|");const formed=world.triggered[`bond:${key}`];return `<tr><td class="entity-id">${entityName(first)} ↔ ${entityName(second)}</td><td>${value}</td><td>${formed?"已形成固定搭档":value>=40?"达到搭档门槛":"普通关系"}</td></tr>`;}).join("");
+      $("stateLabel").textContent=world.step?`第 ${world.step} 个赛季之后`:"赛季初始阵容";
+      $("periodRows").innerHTML=Array.from({length:MAX_STEPS},(_,index)=>{const period=world.periods.find(item=>item.step===index+1);return `<div class="period ${period?"current":""}"><div class="period-num">第 ${index+1} 赛季</div><div class="period-main">${period?`全体操作 +${period.totalSkillDelta.toFixed(2)}`:"尚未模拟"}</div><div class="period-sub">${period?period.scores.map(item=>`${teamName(item.id)} ${item.score}`).join(" · "):"等待推进"}</div></div>`;}).join("");
+    }
+    function choiceSummary(config,state){
+      const direct=state.diffs.find(item=>item.step===0);
+      if(config.action==="move")return `${entityName(config.entity)} 转入 ${teamName(config.group)}`;
+      if(config.action==="chain")return "周屿签入星火，触发林澈转会与顾临新队友连锁";
+      if(config.action==="train")return `${entityName(config.entity)} 的${attributeName(config.attribute)} +${direct?direct.after-direct.before:0}`;
+      if(config.action==="relation")return `${entityName(config.entity)} 与 ${entityName(config.partner)} 双排`;
+      return "选择观察这个赛季";
+    }
+    function renderSummary(){
+      if(!latestAction){$("resultHeadline").textContent="等待赛季结算";$("resultHeadline").className="summary-value";$("passCount").textContent="—";$("passCount").className="summary-value";$("stepCount").textContent="—";$("fingerprint").textContent="—";return;}
+      const directChanges=world.diffs.filter(item=>item.step===0).length;
+      $("resultHeadline").textContent=choiceSummary(latestAction,world);
+      $("passCount").textContent=`${directChanges} 项`;
+      $("stepCount").textContent=`${world.step} 个`;
+      $("fingerprint").textContent=signature(world);
+    }
+    function renderKnowledge(){
+      const items=world.knowledge;
+      $("knowledgeCount").textContent=`${items.length} 条记忆`;
+      $("knowledgeBody").innerHTML=items.length?items.map((item,index)=>`<div class="knowledge" style="margin-bottom:6px"><strong>记忆 ${index+1}</strong><span>${item}</span></div>`).join(""):`<div class="knowledge"><strong>提示</strong><span>完成本轮后，可以重开一轮。选手能力、战队和关系回到初始状态，本轮观察到的经验会保留。</span></div>`;
+      $("rebirthButton").disabled=!canRebirth;
+    }
+    function renderStepper(){
+      for(let step=1;step<=3;step++){
+        const link=$(`stepLink${step}`),pane=$(`stepPane${step}`);
+        link.classList.toggle("active",step===currentStep);
+        link.classList.toggle("done",step<currentStep);
+        link.disabled=step>maxReachedStep;
+        pane.classList.toggle("active",step===currentStep);
+      }
+      $("stepRule1").classList.toggle("done",currentStep>1);
+      $("stepRule2").classList.toggle("done",currentStep>2);
+      $("backToResult").textContent=latestAction?"← 回看赛季变化":"← 返回赛前选择";
+    }
+    function showStep(step){if(step>maxReachedStep)return;currentStep=step;renderStepper();}
+    function handleConfigChange(){
+      if(latestAssertions.length){world=worldBase(world.knowledge);latestAssertions=[];latestAction=null;currentStep=1;maxReachedStep=1;canRebirth=false;render();}
+      else{renderExpected();renderStepper();}
+    }
+    function render(){renderExpected();renderAssertions();renderTrace();renderState();renderSummary();renderKnowledge();renderStepper();}
+    function runExperiment(){
+      const config=readConfig();
+      const baseline=worldBase(world.knowledge);
+      world=runCore(config,baseline.knowledge);
+      const replay=runCore(config,baseline.knowledge);
+      latestAction=config;
+      latestAssertions=createAssertions(config,world,replay,baseline);
+      const knowledge=`${ACTION_NAMES[config.action]}：${config.horizon} 个赛季后 ${choiceSummary(config,world)}；${latestAssertions.every(item=>item.passed)?"赛果符合预期":"赛果存在偏差"}，结果编号 ${signature(world)}。`;
+      world.knowledge=[...baseline.knowledge,knowledge].slice(-5);
+      canRebirth=true;currentStep=2;maxReachedStep=2;
+      render();
+      toast("赛季结算完成，查看选手和战队变化");
+    }
+    function performRebirth(){
+      if(!latestAssertions.length)return;
+      const knowledge=clone(world.knowledge);
+      const reset=worldBase(knowledge);
+      const exactReset=JSON.stringify(reset.entities)===JSON.stringify(BASE_ENTITIES)&&JSON.stringify(reset.relations)===JSON.stringify(BASE_RELATIONS);
+      const knowledgeRetained=reset.knowledge.length===knowledge.length&&reset.knowledge.every((item,index)=>item===knowledge[index]);
+      const timelineReset=reset.step===0&&reset.trace.length===0&&reset.diffs.length===0&&reset.periods.length===0;
+      world=reset;latestAction=null;canRebirth=false;currentStep=3;maxReachedStep=3;
+      latestAssertions=[check("R01","选手状态回到赛季初","所有选手回到初始值",exactReset?"已回到初始值":"未完全重置",exactReset),check("R02","队友关系回到赛季初","关系恢复初始状态",JSON.stringify(world.relations)===JSON.stringify(BASE_RELATIONS)?"已恢复":"未恢复",JSON.stringify(world.relations)===JSON.stringify(BASE_RELATIONS)),check("R03","只保留上轮记忆",`${knowledge.length} 条记忆 / 第 0 赛季`,`${world.knowledge.length} 条记忆 / 第 ${world.step} 赛季`,knowledgeRetained&&timelineReset,"选手、关系、赛季记录重新开始")];
+      render();
+      toast("新一轮开始：状态重置，记忆保留");
+    }
+    function resetBaseline(){
+      world=worldBase([]);latestAssertions=[];latestAction=null;canRebirth=false;currentStep=1;maxReachedStep=1;render();toast("已回到赛季初始状态");
+    }
+    $("actionSelect").addEventListener("change",handleConfigChange);
+    $("entitySelect").addEventListener("change",handleConfigChange);
+    $("attributeSelect").addEventListener("change",handleConfigChange);
+    $("deltaSelect").addEventListener("change",handleConfigChange);
+    $("partnerSelect").addEventListener("change",handleConfigChange);
+    $("groupSelect").addEventListener("change",handleConfigChange);
+    $("horizonSelect").addEventListener("change",handleConfigChange);
+    $("runButton").addEventListener("click",runExperiment);
+    $("runBatchButton").addEventListener("click",startBatchValidation);
+    $("rebirthButton").addEventListener("click",performRebirth);
+    $("resetButton").addEventListener("click",resetBaseline);
+    $("stepLink1").addEventListener("click",()=>showStep(1));
+    $("stepLink2").addEventListener("click",()=>showStep(2));
+    $("stepLink3").addEventListener("click",()=>showStep(3));
+    $("backToChoice").addEventListener("click",()=>showStep(1));
+    $("toCheckButton").addEventListener("click",()=>{maxReachedStep=3;showStep(3);});
+    $("backToResult").addEventListener("click",()=>showStep(latestAction?2:1));
+    $("anotherTestButton").addEventListener("click",()=>{world=worldBase(world.knowledge);latestAssertions=[];latestAction=null;canRebirth=false;currentStep=1;maxReachedStep=1;render();});
+    $("entitySelect").innerHTML=BASE_ENTITIES.map(entity=>`<option value="${entity.id}">实体 ${entity.id} · ${entity.group}</option>`).join("");
+    $("entitySelect").value="A";
+    $("partnerSelect").innerHTML=BASE_ENTITIES.filter(entity=>entity.id!=="A").map(entity=>`<option value="${entity.id}">实体 ${entity.id}</option>`).join("");
+    $("partnerSelect").value="B";
+    syncDynamicOptions();
+    render();
+  </script>
+</body>
+</html>
